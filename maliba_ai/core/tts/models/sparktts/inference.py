@@ -4,7 +4,8 @@ import re
 import soundfile as sf
 
 from maliba_ai.core.tts.models.sparktts.utils.loader import load_tts_model, load_audio_tokenizer
-from maliba_ai.settings.tts.spark import SingleSpeaker, Settings, Speakers
+from maliba_ai.settings.tts.bam_spark import SingleSpeaker, Settings
+from maliba_ai.settings.tts.settings import InferenceOutput
 from typing import  Optional
 
 class BamSparkTTS:
@@ -95,13 +96,13 @@ class BamSparkTTS:
     def synthesize(
         self,
         text: str,
-        speaker_id:Optional[SingleSpeaker]  = Speakers.Adama,
+        speaker_id:Optional[SingleSpeaker]  = None,
         temperature: float = 0.8,
         top_k: int = 50,
         top_p: float = 1.0,
         max_new_audio_tokens: int = 2048,
         output_filename: str = None
-    ) -> np.ndarray:
+    ) -> InferenceOutput:
         
         """
         Generate speech from text with optional speaker ID.
@@ -119,8 +120,9 @@ class BamSparkTTS:
             np.ndarray: Generated waveform as a NumPy array.
         """
 
-        if speaker_id.id.upper() not in Settings.speakers_ids : 
-            raise ValueError("This speaker is not supported")
+        # I'm avoiding this defensive check to allow to use this inference class for other spark_base tts whiout changing the any code
+        # if speaker_id.id.upper() not in Settings.speakers_ids : 
+        #     raise ValueError("This speaker is not supported")
         
         if not text : 
             raise ValueError("text can not be empty")
@@ -128,42 +130,56 @@ class BamSparkTTS:
         if not isinstance(text, str):
             raise TypeError("text should be a string")
                 
-        formatted_text = f"{speaker_id.id}: " + text  if speaker_id else text
-        generated_waveform = self._generate_speech_from_text(
-            text=formatted_text,
-            temperature=temperature,
-            top_k=top_k,
-            top_p=top_p,
-            max_new_audio_tokens=max_new_audio_tokens
-        )
-        
-        if generated_waveform.size > 0 and output_filename:
-            sample_rate = self._audio_tokenizer.config.get("sample_rate", 16000)
-            sf.write(output_filename, generated_waveform, sample_rate)
-        
-        return generated_waveform
-    
+        formatted_text = f"{speaker_id.id}: {text}" if speaker_id else text
 
+        try :
+            generated_waveform = self._generate_speech_from_text(
+                text=formatted_text,
+                temperature=temperature,
+                top_k=top_k,
+                top_p=top_p,
+                max_new_audio_tokens=max_new_audio_tokens
+            )
+            sample_rate = self._audio_tokenizer.config.get("sample_rate", 16000)
+
+            if generated_waveform.size > 0 and output_filename:
+                sf.write(output_filename, generated_waveform, sample_rate)
+
+            return InferenceOutput(
+                    waveform=generated_waveform, 
+                    sample_rate=sample_rate, 
+                    output_filename=output_filename
+                )
+    
+        except Exception as e :
+            return InferenceOutput(error_message=f"error when generating speech: {e}") 
 
 
 
 # if __name__ == "__main__":
-#     tts = BamSparkTTS()
-#     text = "I ni ce."
-#     speaker = Speakers.Adama
-#     waveform = tts.synthesize(text=text, speaker_id=speaker, output_filename="output.wav")
-#     print("Waveform shape:", waveform.shape)    
+#     try:
+#         from maliba_ai.settings.tts.bam_spark import Speakers
+#         tts = BamSparkTTS() 
 
 
+#         examples = {
+#             Speakers.Adama: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
+#             Speakers.Moussa: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?"
+#         }
 
+#         for speaker_id, text in examples.items():
+#             speaker_id = speaker_id
 
-# tts = BambaraTTSInference()
+#             output = tts.synthesize(
+#                 text=text,
+#                 speaker_id=speaker_id,
+#                 output_filename=f"test_{speaker_id.id}.wav"
+#             )
 
-# # Generate speech from Bambara text
-# text = "Aw ni ce. Sedu bɛ aw fo wa aw ka yafa a ma, ka da a kan tuma dɔw la kow ka can."  
+#             if output.error_message:
+#                 print({output.error_message})
 
-# audio = tts.generate_speech(text, speaker_id=Speakers.Seydou)
+                
 
-# # Save the audio
-# sf.write("greeting.wav", audio, 16000)
-# print("Bambara speech generated successfully!")
+#     except Exception as e:
+#         print(e)
