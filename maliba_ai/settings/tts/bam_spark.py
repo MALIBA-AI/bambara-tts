@@ -42,7 +42,7 @@ class Speakers:
     Bakary: SingleSpeaker    = SingleSpeaker(id="SPEAKER_7")
     Ngolo: SingleSpeaker     = SingleSpeaker(id="SPEAKER_8")
     Amara: SingleSpeaker     = SingleSpeaker(id="SPEAKER_9")
-    Ibrahima: SingleSpeaker = SingleSpeaker(id="SPEAKER_10")
+    Ibrahima: SingleSpeaker  = SingleSpeaker(id="SPEAKER_10")
 
 
     @classmethod

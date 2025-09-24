@@ -4,7 +4,7 @@ from typing import Union, List
 
 from maliba_ai.settings.mt.nllb import Settings, Languages, Language
 from maliba_ai.settings.mt.settings import TranslationOutput
-
+    
 
 
 class BambaraTranslator:
