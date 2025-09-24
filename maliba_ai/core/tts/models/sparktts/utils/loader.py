@@ -3,7 +3,7 @@ import os
 import torch
 from unsloth import FastModel
 from huggingface_hub import snapshot_download
-from maliba_ai.settings.tts.spark import Settings
+from maliba_ai.settings.tts.bam_spark import Settings
 from maliba_ai.core.tts.models.sparktts.models.audio_tokenizer import BiCodecTokenizer
 
 def load_tts_model(model_path:str = Settings.model_repo, max_seq_length:int = 2048):
