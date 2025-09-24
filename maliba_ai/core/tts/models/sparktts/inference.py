@@ -156,30 +156,32 @@ class BamSparkTTS:
 
 
 
-# if __name__ == "__main__":
-#     try:
-#         from maliba_ai.settings.tts.bam_spark import Speakers
-#         tts = BamSparkTTS() 
+if __name__ == "__main__":
+    try:
+        from maliba_ai.settings.tts.bam_spark import Speakers
+        tts = BamSparkTTS() 
 
 
-#         examples = {
-#             Speakers.Adama: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
-#             Speakers.Moussa: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?"
-#         }
+        examples = {
+            Speakers.Adama: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
+            Speakers.Moussa: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?"
+        }
 
-#         for speaker_id, text in examples.items():
-#             speaker_id = speaker_id
+        for speaker_id, text in examples.items():
+            speaker_id = SingleSpeaker(
+                id=speaker_id
+            )
 
-#             output = tts.synthesize(
-#                 text=text,
-#                 speaker_id=speaker_id,
-#                 output_filename=f"test_{speaker_id.id}.wav"
-#             )
+            output = tts.synthesize(
+                text=text,
+                speaker_id=speaker_id,
+                output_filename=f"test_{speaker_id.id}.wav"
+            )
 
-#             if output.error_message:
-#                 print({output.error_message})
+            if output.error_message:
+                print({output.error_message})
 
                 
 
-#     except Exception as e:
-#         print(e)
+    except Exception as e:
+        print(e)
