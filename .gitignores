@@ -187,3 +187,21 @@ s3_files/
 data/
 
 *.mp3
+
+
+
+*.model
+*.pth
+*.safetensors
+*.ckpt
+
+logs/
+*.log
+
+
+
+*.csv
+   *.json
+   *.pkl
+   *.parquet
+
