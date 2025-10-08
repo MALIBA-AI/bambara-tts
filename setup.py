@@ -42,26 +42,29 @@ setup(
         "torchaudio>=2.0.0", 
         "transformers>=4.40.0",
         "huggingface_hub>=0.20.0",
-    
         "librosa==0.11.0",
         "soundfile==0.13.1",
         "soxr==0.5.0.post1",
-        
         "einops==0.8.1",
         "einx",
-        
         "omegaconf",
         "numpy>=1.24.0",
         "tqdm>=4.60.0",
         "requests>=2.25.0",
         "safetensors>=0.4.0",
         "packaging>=20.0",
-        "unsloth==2025.6.1"  # Keep this for now to maintain compatibility
+        "unsloth>=2025.9.7",
+        "gensim>=4.3.3",
+        "scikit-learn>=1.7.2",
+        "fasttext>=0.9.3",
+        "gensim>=4.3.3"
+         "peft>=0.17.1",
+
     ],
 
     extras_require={
-        "full": [
-            "unsloth==2025.6.1",  # Use latest compatible version instead of pinned version
+        "tts": [
+            "unsloth>=2025.9.7",  
             "bitsandbytes>=0.41.0; platform_system!='Darwin'",
             "triton>=2.1.0,<3.0.0; platform_system=='Linux'",
             "scipy>=1.10.0",
@@ -88,9 +91,17 @@ setup(
             "networkx>=3.0.0",
             "jinja2>=3.1.0",
         ],
-        
+
+        "asr":[
+             "transformers>=4.40.0",
+            "peft"
+        ],
+
+        "mt": [
+             "transformers>=4.40.0"
+        ],
         "unsloth": [
-            "unsloth==2025.6.1",  # Use latest compatible version (key change!)
+            "unsloth>=2025.9.7",  
             "bitsandbytes>=0.41.0; platform_system!='Darwin'",
             "triton>=2.1.0,<3.0.0; platform_system=='Linux'",
         ],
@@ -112,14 +123,21 @@ setup(
     },
     
     keywords=[
-        "bambara",
-        "tts", 
         "text-to-speech",
-        "speech synthesis",
+        "machine-translation",
+        "speech-recognition",
+        "Text Generation",
+        "Embeddings",
+        "malian-languages",
         "maliba-ai",
         "artificial intelligence",
         "machine learning",
         "natural language processing",
+        "asr",
+        "mt",
+        "tts",
+        "llm",
+        "open-source"
     ],
     include_package_data=True,
     zip_safe=False,
