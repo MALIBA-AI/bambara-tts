@@ -12,7 +12,7 @@ from maliba_ai.settings.embeddings.settings import EmbeddingOutput, SimilarityOu
 
 
 
-class BambaraEmbeddings:
+class WordsEmbeddings:
     """
     FastText word embeddings wrapper for the Bambara language.
 
@@ -113,7 +113,7 @@ class BambaraEmbeddings:
 
 
 # if __name__ == "__main__":
-#     embeddings = BambaraEmbeddings()
+#     embeddings = WordsEmbeddings()
 
 #     sim_words = embeddings.get_similar_words("ye", top_k=10)
 #     if sim_words.error_message:

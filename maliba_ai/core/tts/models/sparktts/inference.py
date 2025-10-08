@@ -19,7 +19,7 @@ class BamSparkTTS:
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model, self._tokenizer = load_tts_model(model_path=model_path, max_seq_length=max_seq_length)
         self._audio_tokenizer = load_audio_tokenizer(self._device)
-    
+
 
     @torch.inference_mode()
     def _generate_speech_from_text(
@@ -52,7 +52,7 @@ class BamSparkTTS:
         ])
         
         model_inputs = self._tokenizer([prompt], return_tensors="pt").to(self._device)
-    
+     
         generated_ids = self._model.generate(
             **model_inputs,
             max_new_tokens=max_new_audio_tokens,
@@ -156,32 +156,32 @@ class BamSparkTTS:
 
 
 
-if __name__ == "__main__":
-    try:
-        from maliba_ai.settings.tts.bam_spark import Speakers
-        tts = BamSparkTTS() 
+# if __name__ == "__main__":
+#     try:
+#         from maliba_ai.settings.tts.bam_spark import Speakers
+#         tts = BamSparkTTS() 
 
 
-        examples = {
-            Speakers.Adama: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
-            Speakers.Moussa: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?"
-        }
+#         examples = {
+#             Speakers.Adama: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
+#             Speakers.Moussa: "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?"
+#         }
 
-        for speaker_id, text in examples.items():
-            speaker_id = SingleSpeaker(
-                id=speaker_id
-            )
+#         for speaker_id, text in examples.items():
+#             speaker_id = SingleSpeaker(
+#                 id=speaker_id
+#             )
 
-            output = tts.synthesize(
-                text=text,
-                speaker_id=speaker_id,
-                output_filename=f"test_{speaker_id.id}.wav"
-            )
+#             output = tts.synthesize(
+#                 text=text,
+#                 speaker_id=speaker_id,
+#                 output_filename=f"test_{speaker_id.id}.wav"
+#             )
 
-            if output.error_message:
-                print({output.error_message})
+#             if output.error_message:
+#                 print({output.error_message})
 
                 
 
-    except Exception as e:
-        print(e)
+#     except Exception as e:
+#         print(e)

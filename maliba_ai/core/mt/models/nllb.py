@@ -7,7 +7,7 @@ from maliba_ai.settings.mt.settings import TranslationOutput
     
 
 
-class BambaraTranslator:
+class Translator:
     def __init__(self, model_name: str = Settings.model_repo, max_length: int = 512):
         """
         Initialize the Bambara Translator.
@@ -61,7 +61,7 @@ class BambaraTranslator:
         
 
 # if __name__ == "__main__":
-#     translator = BambaraTranslator()
+#     translator = Translator()
 #     result = translator.translate(
 #         text="Hello my name is Moussa, I'm a student in Bamako, Mali. I love programming and artificial intelligence.",
 #         src_lang=Languages.english,

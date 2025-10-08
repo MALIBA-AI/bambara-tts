@@ -56,7 +56,7 @@ class MalianTTS:
             (sample_rate, waveform), None if successful
             None, error_message if failed
         """
-        language = language or self.languages[0] # why the first one: if the user load only one model so no need to specify the language
+        language = language or self.languages[0] # Why the first one: if the user load only one model so no need to specify the language
 
         if language not in self.models:
             raise ValueError(f"Unsupported language: {language}. Available: {self.languages}")
@@ -86,55 +86,53 @@ class MalianTTS:
         
 
 
-    
-if __name__ == "__main__":
+# if __name__ == "__main__":
+#     examples = {
+#         "bambara": "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
+#         "boomu": "Vunurobe wozomɛ pɛɛ, Poli we zo woro han Deeɓenu wara li Deeɓenu faralo zuun. Lo we baba a lo wara yi see ɓa Zuwifera ma ɓa Gɛrɛkela wa.",
+#         "dogon": "Pɔɔlɔ, kubɔ lugo joo le, bana dɛin dɛin le, inɛw Ama titiyaanw le digɛu, Ama, emɛ babe bɛrɛ sɔɔ sɔi.",
+#         "pular": "Miɗo ndaarde saabe Laamɗo e saabe Iisaa Almasiihu caroyoowo wuurɓe e maayɓe oo, miɗo ndaardire saabe gartol makko ka num e Laamu makko",
+#         "songhoy": "Haya ka se beenediyo kokoyteraydi go hima nda huukoy foo ka fatta ja subaahi ka taasi goykoyyo ngu rezẽ faridi se",
+#         "tamasheq": "Toḍă tăfukt ɣas, issăɣră-dd măssi-s n-ašĕkrĕš ănaẓraf-net, inn'-as: 'Ǝɣĕr-dd inaxdimăn, tĕẓlĕd-asăn, sănt s-wi dd-ĕšrăynen har tĕkkĕd wi dd-ăzzarnen."
+#     }
 
-    examples = {
-        "bambara": "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
-        "boomu": "Vunurobe wozomɛ pɛɛ, Poli we zo woro han Deeɓenu wara li Deeɓenu faralo zuun. Lo we baba a lo wara yi see ɓa Zuwifera ma ɓa Gɛrɛkela wa.",
-        "dogon": "Pɔɔlɔ, kubɔ lugo joo le, bana dɛin dɛin le, inɛw Ama titiyaanw le digɛu, Ama, emɛ babe bɛrɛ sɔɔ sɔi.",
-        "pular": "Miɗo ndaarde saabe Laamɗo e saabe Iisaa Almasiihu caroyoowo wuurɓe e maayɓe oo, miɗo ndaardire saabe gartol makko ka num e Laamu makko",
-        "songhoy": "Haya ka se beenediyo kokoyteraydi go hima nda huukoy foo ka fatta ja subaahi ka taasi goykoyyo ngu rezẽ faridi se",
-        "tamasheq": "Toḍă tăfukt ɣas, issăɣră-dd măssi-s n-ašĕkrĕš ănaẓraf-net, inn'-as: 'Ǝɣĕr-dd inaxdimăn, tĕẓlĕd-asăn, sănt s-wi dd-ĕšrăynen har tĕkkĕd wi dd-ăzzarnen."
-    }
+#     try:
 
-    try:
+#         ##################################
+#         #### test all languages
+#         ##################################
 
-        ##################################
-        #### test all languages
-        ##################################
+#         tts = MalianTTS()
+#         for lang, text in examples.items():
 
-        tts = MalianTTS()
-        for lang, text in examples.items():
+#             output = tts.synthesize(
+#                 text=text,
+#                 language=lang,
+#                 output_filename=f"test_{lang}.wav"
+#             )
 
-            output = tts.synthesize(
-                text=text,
-                language=lang,
-                output_filename=f"test_{lang}.wav"
-            )
-
-            if output.error_message:
-                print({output.error_message})
+#             if output.error_message:
+#                 print({output.error_message})
 
 
-        ######################################
-        ##### test loading specific languages
-        ######################################
+#         ######################################
+#         ##### test loading specific languages
+#         ######################################
 
-        tts = MalianTTS(languages=["bambara", "dogon", "tamasheq"]) 
-        for lang, text in examples.items():
-            output = tts.synthesize(
-                text=text,
-                language=lang,
-                output_filename=f"test_2_{lang}.wav"
-            )
+#         tts = MalianTTS(languages=["bambara", "dogon", "tamasheq"]) 
+#         for lang, text in examples.items():
+#             output = tts.synthesize(
+#                 text=text,
+#                 language=lang,
+#                 output_filename=f"test_2_{lang}.wav"
+#             )
 
-            if output.error_message:
-                print({output.error_message})
+#             if output.error_message:
+#                 print({output.error_message})
 
 
-    except Exception as e:
-        print(e)
+#     except Exception as e:
+#         print(e)
 
 
 
