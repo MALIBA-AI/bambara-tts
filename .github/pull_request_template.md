@@ -24,4 +24,4 @@ Link to the issue(s) this PR addresses (e.g., `#123`).
 ## Additional Notes
 Add any other context or screenshots, if applicable.
 
-**Tag `@sudoping01`  for review. Thanks for contributing to MALIBA-AI Bambara TTS Inference SDK! ❤️**
+**Tag `@sudoping01` for review. Thanks for contributing to MALIBA-AI Inference Framework SDK! ❤️**
