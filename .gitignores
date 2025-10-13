@@ -34,6 +34,7 @@ wheels/
 share/python-wheels/
 .installed.cfg
 MANIFEST
+env/
 
 # -------------------------------
 # Binary / Model Files
@@ -174,3 +175,4 @@ __pypackages__/
 # -------------------------------
 celerybeat-schedule
 celerybeat.pid
+
