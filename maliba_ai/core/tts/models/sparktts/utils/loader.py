@@ -1,19 +1,22 @@
-
 import os
-import torch
-from unsloth import FastModel
-from huggingface_hub import snapshot_download
-from maliba_ai.settings.tts.bam_spark import Settings
-from maliba_ai.core.tts.models.sparktts.models.audio_tokenizer import BiCodecTokenizer
 
-def load_tts_model(model_path:str = Settings.model_repo, max_seq_length:int = 2048):
+import torch
+from huggingface_hub import snapshot_download
+from unsloth import FastModel
+
+from maliba_ai.core.tts.models.sparktts.models.audio_tokenizer import \
+    BiCodecTokenizer
+from maliba_ai.settings.tts.bam_spark import Settings
+
+
+def load_tts_model(model_path: str = Settings.model_repo, max_seq_length: int = 2048):
     """
     Load the TTS model and tokenizer from the specified repository.
-    
+
     Args:
         model_path: Model path (local or on Hugging Face).
-        max_seq_length : the max seq lenght 
-    
+        max_seq_length : the max seq lenght
+
     Returns:
         tuple: (model, tokenizer) - Loaded TTS model and tokenizer.
     """
@@ -21,7 +24,7 @@ def load_tts_model(model_path:str = Settings.model_repo, max_seq_length:int = 20
         model_name=model_path,
         max_seq_length=max_seq_length,
         dtype=torch.float32,
-        load_in_4bit=False
+        load_in_4bit=False,
     )
     FastModel.for_inference(model)
     return model, tokenizer
@@ -30,10 +33,10 @@ def load_tts_model(model_path:str = Settings.model_repo, max_seq_length:int = 20
 def load_audio_tokenizer(device):
     """
     Load the audio tokenizer, downloading the base model if necessary.
-    
+
     Args:
         device (torch.device): Device to load the tokenizer on ('cuda' or 'cpu').
-    
+
     Returns:
         BiCodecTokenizer: Loaded audio tokenizer instance.
     """

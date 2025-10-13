@@ -14,16 +14,16 @@
 # limitations under the License.
 
 
-import torch
-import numpy as np
-
 from pathlib import Path
 from typing import Any, Dict, Tuple
+
+import numpy as np
+import torch
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Model
 
-from maliba_ai.core.tts.models.sparktts.utils.file import load_config
-from maliba_ai.core.tts.models.sparktts.utils.audio import load_audio
 from maliba_ai.core.tts.models.sparktts.models.bicodec import BiCodec
+from maliba_ai.core.tts.models.sparktts.utils.audio import load_audio
+from maliba_ai.core.tts.models.sparktts.utils.file import load_config
 
 
 class BiCodecTokenizer:

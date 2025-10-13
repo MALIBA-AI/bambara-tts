@@ -1,24 +1,27 @@
-import pytest 
+from typing import Optional, Union
+
+import pytest
+
 from maliba_ai.settings.tts.bam_spark import Speakers
-from  typing import Union, Optional
+
 
 @pytest.fixture
 def inference_data_samples(
-        test_type : str,
-        text_samples : Optional[list[str]] = None, 
-        speakers : Optional[list[Speakers]] = None, 
-        audio_samples : Optional[list[Union[str, bytes]]] = None
-    ) -> Union[list[tuple[str, Speakers]], list[bytes], list[str]] : 
+    test_type: str,
+    text_samples: Optional[list[str]] = None,
+    speakers: Optional[list[Speakers]] = None,
+    audio_samples: Optional[list[Union[str, bytes]]] = None,
+) -> Union[list[tuple[str, Speakers]], list[bytes], list[str]]:
     """
     Generate data samples for inference tests
-    
+
     Args:
         test_type (str): Type of model to be tested: TTS, ASR, MT or LLM
         text_samples (optional): text samples to use for the test
-        speakers (for TTS test): speakers to use for the test 
+        speakers (for TTS test): speakers to use for the test
         audio_samples (for ASR): audio samples to use for the test
     Returns:
-        data samples with the correct data types depending on the type 
+        data samples with the correct data types depending on the type
         of model being tested
     """
 
@@ -30,13 +33,13 @@ def inference_data_samples(
         # TODO: Add more samples
         text_samples = [
             "An filɛ ni ye yɔrɔ minna ni an ye an sigi ka a layɛ yala an bɛ ka baara min kɛ ɛsike a kɛlen don ka Ɲɛ wa ?",
-            ]
+        ]
 
     # speakers to include in the tests if none specified
     if speakers.size() == 0:
         speakers = [
             Speakers.Adama,
-            Speakers.Moussa,    
+            Speakers.Moussa,
             Speakers.Bourama,
             Speakers.Modibo,
             Speakers.Seydou,
@@ -44,25 +47,24 @@ def inference_data_samples(
             Speakers.Bakary,
             Speakers.Ngolo,
             Speakers.Amara,
-            Speakers.Ibrahima
+            Speakers.Ibrahima,
         ]
 
     # Building data_samples based on the test type
-    if test_type == 'TTS':
+    if test_type == "TTS":
         # input: (Text, Speaker)
         for text in text_samples:
             for speaker in speakers:
                 data_samples.append((text, speaker))
-    elif test_type == 'ASR':
+    elif test_type == "ASR":
         # input: Audio
         pass
-    elif test_type == 'MT':
+    elif test_type == "MT":
         # input: Text
         data_samples = text_samples
-    elif test_type == 'LLM':
+    elif test_type == "LLM":
         # input: Text
         data_samples = text_samples
     else:
-        raise ValueError("Test type can only be one of these: TTS, ASR, Mt, LLM.") 
+        raise ValueError("Test type can only be one of these: TTS, ASR, Mt, LLM.")
     return data_samples
-

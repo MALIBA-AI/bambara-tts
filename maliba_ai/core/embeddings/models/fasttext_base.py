@@ -1,15 +1,18 @@
 import os
 import tempfile
-from typing import List, Tuple, Optional
+from typing import List, Optional
+
 import numpy as np
-from dataclasses import dataclass
 from gensim.models import KeyedVectors
-from sklearn.metrics.pairwise import cosine_similarity
 from huggingface_hub import hf_hub_download
+from sklearn.metrics.pairwise import cosine_similarity
 
-from maliba_ai.settings.embeddings.fasttext import Settings as embeddings_settings
-from maliba_ai.settings.embeddings.settings import EmbeddingOutput, SimilarityOutput, SimilarWordsOutput, TextSearchOutput
-
+from maliba_ai.settings.embeddings.fasttext import \
+    Settings as embeddings_settings
+from maliba_ai.settings.embeddings.settings import (EmbeddingOutput,
+                                                    SimilarityOutput,
+                                                    SimilarWordsOutput,
+                                                    TextSearchOutput)
 
 
 class WordsEmbeddings:
@@ -24,9 +27,11 @@ class WordsEmbeddings:
     - Text similarity search
     """
 
-    def __init__(self, 
-                 model_id: str = embeddings_settings.model_repo, 
-                 cache_dir: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        model_id: str = embeddings_settings.model_repo,
+        cache_dir: Optional[str] = None,
+    ) -> None:
         self.model_id = model_id
         self.cache_dir = cache_dir or tempfile.gettempdir()
         self.model: Optional[KeyedVectors] = None
@@ -39,7 +44,7 @@ class WordsEmbeddings:
             model_path = hf_hub_download(
                 repo_id=self.model_id,
                 filename=embeddings_settings.model_file_name,
-                cache_dir=self.cache_dir
+                cache_dir=self.cache_dir,
             )
             self.model = KeyedVectors.load(model_path)
             self._initialize_model_attributes()
@@ -76,7 +81,9 @@ class WordsEmbeddings:
 
     def calculate_similarity(self, word1: str, word2: str) -> SimilarityOutput:
         if not (self.contains_word(word1) and self.contains_word(word2)):
-            return SimilarityOutput(error_message=f"One of '{word1}' or '{word2}' not in vocabulary.")
+            return SimilarityOutput(
+                error_message=f"One of '{word1}' or '{word2}' not in vocabulary."
+            )
         vec1 = self.model[word1]
         vec2 = self.model[word2]
         score = float(cosine_similarity([vec1], [vec2])[0][0])
@@ -87,17 +94,18 @@ class WordsEmbeddings:
         vectors = [self.model[word] for word in words if self.contains_word(word)]
         return np.mean(vectors, axis=0) if vectors else np.zeros(self.dimension)
 
-    def search_similar_texts(self, 
-                             query: str, 
-                             texts: List[str], 
-                             top_k: int = 5) -> TextSearchOutput:
+    def search_similar_texts(
+        self, query: str, texts: List[str], top_k: int = 5
+    ) -> TextSearchOutput:
         try:
             query_vector = self.text_to_vector(query)
             similarities = []
             for idx, text in enumerate(texts):
                 text_vector = self.text_to_vector(text)
                 if np.any(text_vector):
-                    score = float(cosine_similarity([query_vector], [text_vector])[0][0])
+                    score = float(
+                        cosine_similarity([query_vector], [text_vector])[0][0]
+                    )
                     similarities.append((score, text, idx))
             similarities.sort(key=lambda x: x[0], reverse=True)
             return TextSearchOutput(results=similarities[:top_k])
@@ -109,7 +117,6 @@ class WordsEmbeddings:
 
     def contains_word(self, word: str) -> bool:
         return self.model is not None and word in self.model.key_to_index
-
 
 
 # if __name__ == "__main__":

@@ -18,12 +18,7 @@
 import torch.nn as nn
 
 from maliba_ai.core.tts.models.sparktts.modules.blocks.layers import (
-    Snake1d,
-    WNConv1d,
-    ResidualUnit,
-    WNConvTranspose1d,
-    init_weights,
-)
+    ResidualUnit, Snake1d, WNConv1d, WNConvTranspose1d, init_weights)
 
 
 class DecoderBlock(nn.Module):

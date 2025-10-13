@@ -14,13 +14,15 @@
 # limitations under the License.
 
 
+from typing import List
+
 import torch
 import torch.nn as nn
 
-from typing import List
-
-from maliba_ai.core.tts.models.sparktts.modules.blocks.vocos import VocosBackbone
-from maliba_ai.core.tts.models.sparktts.modules.blocks.samper import SamplingBlock
+from maliba_ai.core.tts.models.sparktts.modules.blocks.samper import \
+    SamplingBlock
+from maliba_ai.core.tts.models.sparktts.modules.blocks.vocos import \
+    VocosBackbone
 
 
 class Decoder(nn.Module):

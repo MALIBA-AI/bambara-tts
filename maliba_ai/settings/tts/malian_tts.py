@@ -1,5 +1,5 @@
-
 from typing import List
+
 
 class Submodels:
     bambara = "bambara"
@@ -15,9 +15,3 @@ class Settings:
     models_repo: str = "MALIBA-AI/malian-tts"
     models: List[str] = Submodels.all_languages
     models_subfolder: str = "models"
-
-
-    
-
-
-

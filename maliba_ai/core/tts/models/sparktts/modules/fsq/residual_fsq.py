@@ -1,25 +1,26 @@
 import random
-import torch
-import torch.nn.functional as F
-import torch.distributed as dist
-
-from typing import List
-from torch import nn
-from torch.nn import Module
-from torch.amp import autocast
-from einx import get_at
-from einops import rearrange, reduce, pack, unpack
 from math import ceil
+from typing import List
 
-from maliba_ai.core.tts.models.sparktts.modules.fsq.finite_scalar_quantization import FSQ
+import torch
+import torch.distributed as dist
+import torch.nn.functional as F
+from einops import pack, rearrange, reduce, unpack
+from einx import get_at
+from torch import nn
+from torch.amp import autocast
+from torch.nn import Module
+
+from maliba_ai.core.tts.models.sparktts.modules.fsq.finite_scalar_quantization import \
+    FSQ
 
 
 def exists(val):
     return val is not None
 
 
-def first(l):
-    return l[0]
+def first(lst):
+    return lst[0]
 
 
 def default(val, d):
@@ -111,8 +112,10 @@ class ResidualFSQ(Module):
         return codebooks
 
     def get_codes_from_indices(self, indices):
-
-        batch, quantize_dim = indices.shape[0], indices.shape[-1]
+        _, quantize_dim = (
+            indices.shape[0],
+            indices.shape[-1],
+        )  # _ is the batch but it's not used there so no need to use the memory
 
         # may also receive indices in the shape of 'b h w q' (accept_image_fmap)
 
@@ -122,9 +125,9 @@ class ResidualFSQ(Module):
         # and the network should be able to reconstruct
 
         if quantize_dim < self.num_quantizers:
-            assert (
-                self.quantize_dropout > 0.0
-            ), "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
+            assert self.quantize_dropout > 0.0, (
+                "quantize dropout must be greater than 0 if you wish to reconstruct from a signal with less fine quantizations"
+            )
             indices = F.pad(indices, (0, self.num_quantizers - quantize_dim), value=-1)
 
         # take care of quantizer dropout
@@ -184,7 +187,6 @@ class ResidualFSQ(Module):
         # also prepare null indices
 
         if should_quantize_dropout:
-
             # check if seed is manually passed in
 
             if not exists(rand_quantize_dropout_fixed_seed):
@@ -214,7 +216,6 @@ class ResidualFSQ(Module):
             for quantizer_index, (layer, scale) in enumerate(
                 zip(self.layers, self.scales)
             ):
-
                 if (
                     should_quantize_dropout
                     and quantizer_index > rand_quantize_dropout_index

@@ -13,13 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
 
-from typing import List, Tuple
-from maliba_ai.core.tts.models.sparktts.modules.fsq.residual_fsq import ResidualFSQ
-from maliba_ai.core.tts.models.sparktts.modules.speaker.ecapa_tdnn import ECAPA_TDNN_GLOB_c512
-from maliba_ai.core.tts.models.sparktts.modules.speaker.perceiver_encoder import PerceiverResampler
+from maliba_ai.core.tts.models.sparktts.modules.fsq.residual_fsq import \
+    ResidualFSQ
+from maliba_ai.core.tts.models.sparktts.modules.speaker.ecapa_tdnn import \
+    ECAPA_TDNN_GLOB_c512
+from maliba_ai.core.tts.models.sparktts.modules.speaker.perceiver_encoder import \
+    PerceiverResampler
 
 """
 x-vector + d-vector
@@ -96,20 +100,23 @@ class SpeakerEncoder(nn.Module):
         d_vector = self.project(x)
 
         return x_vector, d_vector
-    
+
     def tokenize(self, mels: torch.Tensor) -> torch.Tensor:
         """tokenize the input mel spectrogram"""
         _, features = self.speaker_encoder(mels, True)
         x = self.perceiver_sampler(features.transpose(1, 2)).transpose(1, 2)
         zq, indices = self.quantizer(x)
         return indices
-    
+
     def detokenize(self, indices: torch.Tensor) -> torch.Tensor:
         """detokenize the input indices to d-vector"""
-        zq = self.quantizer.get_output_from_indices(indices.transpose(1, 2)).transpose(1, 2)
+        zq = self.quantizer.get_output_from_indices(indices.transpose(1, 2)).transpose(
+            1, 2
+        )
         x = zq.reshape(zq.shape[0], -1)
         d_vector = self.project(x)
         return d_vector
+
 
 if __name__ == "__main__":
     model = SpeakerEncoder(

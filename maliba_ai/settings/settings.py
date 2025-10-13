@@ -1,32 +1,33 @@
 from dataclasses import dataclass
 from typing import List
 
+
 @dataclass
 class Model:
     architecture: str
     task: str
     version: str
-    path : str
+    path: str
 
 
 class AvailableASRModels:
     """
     Class to hold available ASR models and their configurations.
     """
+
     bambara: List[Model] = [
         Model(
             architecture="whisper",
             task="asr",
             version="v1",
-            path="MALIBA-AI/bambara-asr-v{version}"
-        ), 
-
+            path="MALIBA-AI/bambara-asr-v{version}",
+        ),
         Model(
-            architecture = "gemma-3n", 
-            task= "asr",
-            version="v1", 
-            path = "MALIBA-AI/gemma-asr-v{version}"
-        )
+            architecture="gemma-3n",
+            task="asr",
+            version="v1",
+            path="MALIBA-AI/gemma-asr-v{version}",
+        ),
     ]
 
     songhoy: List[Model] = [
@@ -34,7 +35,7 @@ class AvailableASRModels:
             architecture="whisper",
             task="asr",
             version="v1",
-            path="MALIBA-AI/songhoy-asr-v{version}"
+            path="MALIBA-AI/songhoy-asr-v{version}",
         )
     ]
 
@@ -43,7 +44,7 @@ class AvailableASRModels:
             architecture="wav2vec",
             task="asr",
             version="v1",
-            path="MALIBA-AI/bomu-asr-v{version}"
+            path="MALIBA-AI/bomu-asr-v{version}",
         )
     ]
     dogon: List[Model] = [
@@ -51,7 +52,7 @@ class AvailableASRModels:
             architecture="wav2vec",
             task="asr",
             version="v1",
-            path="MALIBA-AI/dogon-asr-v{version}"
+            path="MALIBA-AI/dogon-asr-v{version}",
         )
     ]
     minianka: List[Model] = [
@@ -59,7 +60,7 @@ class AvailableASRModels:
             architecture="wav2vec",
             task="asr",
             version="v1",
-            path="MALIBA-AI/minianka-asr-v{version}"
+            path="MALIBA-AI/minianka-asr-v{version}",
         )
     ]
 
@@ -70,7 +71,7 @@ class AvailableTTSModels:
             architecture="spark_tts",
             task="tts",
             version="v1",
-            path="MALIBA-AI/bambara-tts-v{version}"
+            path="MALIBA-AI/bambara-tts-v{version}",
         )
     ]
     malian_tts: List[Model] = [
@@ -78,7 +79,7 @@ class AvailableTTSModels:
             architecture="vits",
             task="tts",
             version="v1",
-            path="MALIBA-AI/malian-tts-v{version}"
+            path="MALIBA-AI/malian-tts-v{version}",
         )
     ]
     multilangual_tts: List[Model] = [
@@ -86,9 +87,10 @@ class AvailableTTSModels:
             architecture="spark_tts",
             task="tts",
             version="v1",
-            path="MALIBA-AI/multilingual-tts-v{version}"
+            path="MALIBA-AI/multilingual-tts-v{version}",
         )
     ]
+
 
 class AvailableEmbeddingModels:
     bambara: List[Model] = [
@@ -96,9 +98,10 @@ class AvailableEmbeddingModels:
             architecture="fasttext",
             task="embeddings",
             version="v1",
-            path="MALIBA-AI/bambara-embeddings-v{version}"
+            path="MALIBA-AI/bambara-embeddings-v{version}",
         )
     ]
+
 
 class AvailableLLMModels:
     bambara: List[Model] = [
@@ -106,40 +109,34 @@ class AvailableLLMModels:
             architecture="gemma-3n",
             task="llm",
             version="v1",
-            path="MALIBA-AI/bambara-llm-v{version}"
+            path="MALIBA-AI/bambara-llm-v{version}",
         )
     ]
 
 
-class AvailableMTModels: 
+class AvailableMTModels:
     bambara: List[Model] = [
         Model(
             architecture="nllb",
             task="mt",
             version="v1",
-            path="MALIBA-AI/bambara-mt-{version}"
+            path="MALIBA-AI/bambara-mt-{version}",
         )
     ]
 
 
-
 class Models:
-    asr  = AvailableASRModels
-    tts  = AvailableTTSModels
-    mt   = AvailableMTModels
-    llm  = AvailableLLMModels
+    asr = AvailableASRModels
+    tts = AvailableTTSModels
+    mt = AvailableMTModels
+    llm = AvailableLLMModels
     embeddings = AvailableEmbeddingModels
-    
+
     @classmethod
     def get(cls, category: str):
         return getattr(cls, category, None)
 
 
-
-
 @dataclass
 class Settings:
     models: Models = Models
-
-    
-     

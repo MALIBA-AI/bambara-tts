@@ -1,12 +1,8 @@
-import torch
-from  typing import Union, Optional
+from typing import Optional, Union
 
-from transformers import (
-    WhisperForConditionalGeneration,
-    WhisperTokenizer,
-    WhisperProcessor,
-    pipeline
-)
+import torch
+from transformers import (WhisperForConditionalGeneration, WhisperProcessor,
+                          WhisperTokenizer, pipeline)
 
 
 class ASR:
@@ -19,7 +15,7 @@ class ASR:
     - Transcribing audio into text
     """
 
-    def __init__(self, model_id: str )->None:
+    def __init__(self, model_id: str) -> None:
         self.model_id = model_id
         self.torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
         self.model = None
@@ -43,9 +39,9 @@ class ASR:
             device_map="auto",
             use_cache=True,
             attention_dropout=0.1,
-            dropout=0.1
+            dropout=0.1,
         )
-        
+
         self.model.config.suppress_tokens = []
         self.model.config.no_repeat_ngram_size = 3
         self.model.config.early_stopping = True
@@ -73,18 +69,18 @@ class ASR:
             chunk_length_s=30,
             stride_length_s=3,
             return_timestamps=False,
-            batch_size=1
+            batch_size=1,
         )
 
-    def transcribe(self, 
-                   audio: Union[str, bytes], 
-                   temperature: Optional[float] = 0.0, 
-                   do_sample: Optional[bool] = False, 
-                   length: Optional[int] = 1.0, 
-                   repetition_penalty: Optional[float] = 1.2, 
-                     num_beams: Optional[int] = 5
-                   ) -> dict:
-        
+    def transcribe(
+        self,
+        audio: Union[str, bytes],
+        temperature: Optional[float] = 0.0,
+        do_sample: Optional[bool] = False,
+        length: Optional[int] = 1.0,
+        repetition_penalty: Optional[float] = 1.2,
+        num_beams: Optional[int] = 5,
+    ) -> dict:
         """
         Transcribe audio into text using the Whisper ASR pipeline.
 
@@ -108,11 +104,11 @@ class ASR:
                     "do_sample": do_sample,
                     "num_beams": num_beams,
                     "length_penalty": length,
-                    "repetition_penalty": repetition_penalty
-                }
+                    "repetition_penalty": repetition_penalty,
+                },
             )
             return result
-        
+
         except Exception as e:
             print(f"Error during transcription: {e}")
             return None

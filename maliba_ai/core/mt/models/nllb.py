@@ -1,10 +1,10 @@
+from typing import List, Union
+
 import torch
 from transformers import pipeline
-from typing import Union, List
 
-from maliba_ai.settings.mt.nllb import Settings, Languages, Language
+from maliba_ai.settings.mt.nllb import Language, Settings
 from maliba_ai.settings.mt.settings import TranslationOutput
-    
 
 
 class Translator:
@@ -22,7 +22,7 @@ class Translator:
             model=model_name,
             device=0 if self._device.type == "cuda" else -1,
             max_length=max_length,
-            truncation=True
+            truncation=True,
         )
 
     def translate(
@@ -30,7 +30,7 @@ class Translator:
         text: Union[str, List[str]],
         src_lang: Language,
         tgt_lang: Language,
-        num_beams: int = 2
+        num_beams: int = 2,
     ) -> TranslationOutput:
         """
         Translate text from source language to target language.
@@ -48,17 +48,25 @@ class Translator:
             return TranslationOutput(error_message="text cannot be empty")
 
         if src_lang == tgt_lang:
-            return TranslationOutput(translation=None, error_message="source and target languages must be different")
+            return TranslationOutput(
+                translation=None,
+                error_message="source and target languages must be different",
+            )
 
         try:
             translation = self._translator(
-                text, src_lang=src_lang.code, tgt_lang=tgt_lang.code, num_beams=num_beams
+                text,
+                src_lang=src_lang.code,
+                tgt_lang=tgt_lang.code,
+                num_beams=num_beams,
             )
-            return TranslationOutput(translation=str(translation[0]["translation_text"]))
+            return TranslationOutput(
+                translation=str(translation[0]["translation_text"])
+            )
 
         except Exception as e:
             return TranslationOutput(error_message=f"error during translation: {e}")
-        
+
 
 # if __name__ == "__main__":
 #     translator = Translator()

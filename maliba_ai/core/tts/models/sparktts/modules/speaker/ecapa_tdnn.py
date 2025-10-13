@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" This implementation is adapted from github repo:
-    https://github.com/lawlict/ECAPA-TDNN.
+"""This implementation is adapted from github repo:
+https://github.com/lawlict/ECAPA-TDNN.
 """
 
 import torch
@@ -87,7 +87,6 @@ class Res2Conv1dReluBn(nn.Module):
 
 
 class Conv1dReluBn(nn.Module):
-
     def __init__(
         self,
         in_channels,
@@ -113,7 +112,6 @@ class Conv1dReluBn(nn.Module):
 
 
 class SE_Connect(nn.Module):
-
     def __init__(self, channels, se_bottleneck_dim=128):
         super().__init__()
         self.linear1 = nn.Linear(channels, se_bottleneck_dim)
@@ -133,7 +131,6 @@ class SE_Connect(nn.Module):
 
 
 class SE_Res2Block(nn.Module):
-
     def __init__(self, channels, kernel_size, stride, padding, dilation, scale):
         super().__init__()
         self.se_res2block = nn.Sequential(
@@ -150,7 +147,6 @@ class SE_Res2Block(nn.Module):
 
 
 class ECAPA_TDNN(nn.Module):
-
     def __init__(
         self,
         channels=512,
