@@ -1,4 +1,5 @@
 import os
+
 from setuptools import find_packages, setup
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
@@ -9,12 +10,12 @@ with open(os.path.join(this_directory, "README.md"), encoding="utf-8") as f:
 setup(
     name="maliba_ai",
     version="1.1.1-beta",
-    author="sudoping01",  
-    author_email="sudoping01@gmail.com",  
+    author="sudoping01",
+    author_email="sudoping01@gmail.com",
     description="Bambara Text-to-Speech system using Maliba-AI models",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/MALIBA-AI/bambara-tts",  
+    url="https://github.com/MALIBA-AI/bambara-tts",
     project_urls={
         "Bug Tracker": "https://github.com/MALIBA-AI/bambara-tts/issues",
         "Documentation": "https://github.com/MALIBA-AI/bambara-tts/wiki",
@@ -27,7 +28,7 @@ setup(
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "Topic :: Multimedia :: Sound/Audio :: Speech",
-        "License :: Other/Proprietary License",  
+        "License :: Other/Proprietary License",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -36,10 +37,9 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.8",
-
     install_requires=[
         "torch>=2.0.0",
-        "torchaudio>=2.0.0", 
+        "torchaudio>=2.0.0",
         "transformers>=4.40.0",
         "huggingface_hub>=0.20.0",
         "librosa==0.11.0",
@@ -57,14 +57,11 @@ setup(
         "gensim>=4.3.3",
         "scikit-learn>=1.7.2",
         "fasttext>=0.9.3",
-        "gensim>=4.3.3"
-         "peft>=0.17.1",
-
+        "gensim>=4.3.3peft>=0.17.1",
     ],
-
     extras_require={
         "tts": [
-            "unsloth>=2025.9.7",  
+            "unsloth>=2025.9.7",
             "bitsandbytes>=0.41.0; platform_system!='Darwin'",
             "triton>=2.1.0,<3.0.0; platform_system=='Linux'",
             "scipy>=1.10.0",
@@ -91,37 +88,27 @@ setup(
             "networkx>=3.0.0",
             "jinja2>=3.1.0",
         ],
-
-        "asr":[
-             "transformers>=4.40.0",
-            "peft"
-        ],
-
-        "mt": [
-             "transformers>=4.40.0"
-        ],
+        "asr": ["transformers>=4.40.0", "peft"],
+        "mt": ["transformers>=4.40.0"],
         "unsloth": [
-            "unsloth>=2025.9.7",  
+            "unsloth>=2025.9.7",
             "bitsandbytes>=0.41.0; platform_system!='Darwin'",
             "triton>=2.1.0,<3.0.0; platform_system=='Linux'",
         ],
-        
         "dev": [
             "ruff==0.11.4",
-            "isort==6.0.1", 
+            "isort==6.0.1",
             "pre-commit==4.2.0",
             "pytest>=7.0.0",
             "black>=22.0.0",
             "flake8>=4.0.0",
             "mypy>=0.950",
         ],
-        
         "docs": [
             "sphinx>=4.0.0",
             "sphinx-rtd-theme>=0.5.0",
         ],
     },
-    
     keywords=[
         "text-to-speech",
         "machine-translation",
@@ -137,11 +124,10 @@ setup(
         "mt",
         "tts",
         "llm",
-        "open-source"
+        "open-source",
     ],
     include_package_data=True,
     zip_safe=False,
     license="CC BY-NC-SA 4.0",
     platforms=["any"],
-
 )
