@@ -55,7 +55,7 @@ setup(
             "packaging>=20.0",
             "unsloth>=0.5.0",
             "gensim>=4.3.3",
-            "peft>=0.17.1",
+            "peft>=0.13",
             "scikit-learn>=1.3.2",
             "fasttext>=0.9.3",
         ],
