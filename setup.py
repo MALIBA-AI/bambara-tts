@@ -65,7 +65,7 @@ setup(
             "bitsandbytes>=0.41.0; platform_system!='Darwin'",
             "triton>=2.1.0,<3.0.0; platform_system=='Linux'",
             "scipy>=1.10.0",
-            "scikit-learn>=1.2.0",
+            "scikit-learn>=1.3.2",
             "numba>=0.56.0",
             "llvmlite>=0.39.0",
             "audioread>=3.0.0",
