@@ -56,7 +56,8 @@ setup(
         "requests>=2.25.0",
         "safetensors>=0.4.0",
         "packaging>=20.0",
-         "unsloth==2025.9.7"  
+         "unsloth==2025.9.7",  
+         "bambara-text-normalizer"
     ],
 
     extras_require={

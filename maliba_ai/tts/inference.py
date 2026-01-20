@@ -7,6 +7,8 @@ from maliba_ai.models.models import load_tts_model, load_audio_tokenizer
 from maliba_ai.config.speakers import Adama, SingleSpeaker, Settings
 from typing import  Optional
 
+from bambara_normalizer import normalize
+
 class BambaraTTSInference:
     def __init__(self, model_path:Optional[str] = Settings.model_repo, max_seq_length:Optional[int] = 2048):
         """
@@ -118,6 +120,29 @@ class BambaraTTSInference:
         Returns:
             np.ndarray: Generated waveform as a NumPy array.
         """
+
+        #let's normalized the input text here we use : 
+        # https://pypi.org/project/bambara-text-normalizer
+        
+        text = normalize(
+            text,
+            mode="expand",  
+            preserve_tones=False,               
+            normalize_legacy_orthography=True, 
+            lowercase=True,                     
+            remove_punctuation=False,           
+            normalize_whitespace=True,         
+            normalize_apostrophes=True,         
+            normalize_special_chars=True,    
+            expand_dates = True,
+            expand_numbers=True,  
+            expand_times=True,            
+            remove_diacritics_except_tones=False,  
+            handle_french_loanwords=True,   
+            strip_repetitions=False,       
+            normalize_compounds=True, 
+        )
+
 
         if speaker_id.id.upper() not in Settings.speakers_ids : 
             raise ValueError("This speaker is not supported")
