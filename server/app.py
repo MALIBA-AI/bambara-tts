@@ -1,4 +1,5 @@
 
+import asyncio
 import io
 import logging
 import re
@@ -330,35 +331,63 @@ async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
 
     global_ids: list = []
     semantic: list = []
-    buffer = ""
     streamer = _CrossfadeStreamer(
         vocoder, global_ids, semantic, context_tokens, config.stream_xfade_samples
     )
 
-    async for piece in state["llama"].stream_generate(
-        prompt,
-        max_tokens=req.max_tokens,
-        temperature=req.temperature,
-        top_k=req.top_k,
-        top_p=req.top_p,
-        seed=req.seed,
-    ):
-        buffer += piece
-        matches = list(_STREAM_TOKEN_RE.finditer(buffer))
-        if matches:
-            for m in matches:
-                kind, num = m.group(1), int(m.group(2))
-                (global_ids if kind == "global" else semantic).append(num)
-            buffer = buffer[matches[-1].end():]
+    # Producer: continuously pull tokens from llama.cpp so generation never
+    # stalls while we decode. Decoding runs in a worker thread (below), so the
+    # LLM keeps producing the *next* tokens while the *current* chunk decodes.
+    new_data = asyncio.Event()
+    done = asyncio.Event()
+    err: dict = {}
 
-        while len(semantic) - streamer.committed >= chunk_tokens and global_ids:
-            data = streamer.step(len(semantic))
-            if data:
-                yield data
+    async def produce():
+        buffer = ""
+        try:
+            async for piece in state["llama"].stream_generate(
+                prompt,
+                max_tokens=req.max_tokens,
+                temperature=req.temperature,
+                top_k=req.top_k,
+                top_p=req.top_p,
+                seed=req.seed,
+            ):
+                buffer += piece
+                matches = list(_STREAM_TOKEN_RE.finditer(buffer))
+                if matches:
+                    for m in matches:
+                        kind, num = m.group(1), int(m.group(2))
+                        (global_ids if kind == "global" else semantic).append(num)
+                    buffer = buffer[matches[-1].end():]
+                    new_data.set()
+        except Exception as exc:  # noqa: BLE001
+            err["exc"] = exc
+        finally:
+            done.set()
+            new_data.set()
 
-    data = streamer.flush()
-    if data:
-        yield data
+    producer = asyncio.create_task(produce())
+    try:
+        while True:
+            # Decode every full chunk that is ready. The decode is offloaded to a
+            # thread so the producer keeps reading tokens meanwhile.
+            while len(semantic) - streamer.committed >= chunk_tokens and global_ids:
+                data = await asyncio.to_thread(streamer.step, len(semantic))
+                if data:
+                    yield data
+            if done.is_set():
+                break
+            new_data.clear()
+            await new_data.wait()
+
+        data = await asyncio.to_thread(streamer.flush)
+        if data:
+            yield data
+        if "exc" in err:
+            logger.exception("llama.cpp streaming failed", exc_info=err["exc"])
+    finally:
+        producer.cancel()
 
 
 @app.get("/health")
