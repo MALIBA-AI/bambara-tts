@@ -251,24 +251,66 @@ def _streaming_wav_header(sample_rate: int, channels: int = 1, bits: int = 16) -
     )
 
 
-def _decode_overlap(vocoder, global_ids, semantic, emitted: int, end: int, context: int) -> np.ndarray:
-    """Decode semantic[emitted:end] with `context` left tokens, trimmed off.
+class _CrossfadeStreamer:
+    """Decodes semantic tokens in chunks and stitches them seamlessly.
 
-    Decoding with left context gives the vocoder enough history to avoid a click
-    at the chunk boundary; the warm-up samples are then dropped so only the new
-    region is returned. Samples-per-token is measured from this very decode, so
-    it stays correct regardless of the codec's exact frame rate.
+    Each chunk is decoded with `context` left tokens for vocoder warm-up. To
+    avoid a click where two independently-decoded chunks meet, the last
+    `xfade` samples of every emitted chunk are held back and crossfaded with the
+    *same region* re-decoded (in a longer context) on the next chunk. The result
+    is a continuous waveform with no seams and no inserted silence.
     """
-    start = max(0, emitted - context)
-    n = end - start
-    if n <= 0 or not global_ids:
-        return np.array([], dtype=np.float32)
-    wav = vocoder.tokens_to_wav(global_ids, semantic[start:end])
-    if wav.size == 0:
-        return wav
-    samples_per_token = len(wav) / n
-    skip = int(round((emitted - start) * samples_per_token))
-    return wav[skip:]
+
+    def __init__(self, vocoder, global_ids, semantic, context: int, xfade: int):
+        self.v = vocoder
+        self.global_ids = global_ids
+        self.semantic = semantic
+        self.context = context
+        self.xfade = xfade
+        self.committed = 0           # tokens whose audio is fully emitted
+        self.hold = None             # held tail (audio ending at `committed`)
+
+    def _decode(self, end: int):
+        start = max(0, self.committed - self.context)
+        n = end - start
+        if n <= 0 or not self.global_ids:
+            return None, 0, 0
+        wav = self.v.tokens_to_wav(self.global_ids, self.semantic[start:end])
+        if wav.size == 0:
+            return None, 0, 0
+        spt = len(wav) / n
+        c = int(round((self.committed - start) * spt))  # sample index of `committed`
+        return wav, c, len(wav)
+
+    def step(self, end: int) -> bytes:
+        wav, c, end_s = self._decode(end)
+        if wav is None:
+            return b""
+        parts = []
+        if self.hold is not None:
+            xf = min(self.xfade, c, self.hold.shape[0])
+            if xf > 0:
+                fade_out = np.linspace(1.0, 0.0, xf, dtype=np.float32)
+                fade_in = np.linspace(0.0, 1.0, xf, dtype=np.float32)
+                parts.append(self.hold[-xf:] * fade_out + wav[c - xf:c] * fade_in)
+        seg = wav[c:end_s]
+        if seg.shape[0] > self.xfade:
+            parts.append(seg[:-self.xfade])
+            self.hold = seg[-self.xfade:].copy()
+        else:
+            parts.append(seg)
+            self.hold = None
+        self.committed = end
+        if not parts:
+            return b""
+        return _pcm16_bytes(np.concatenate(parts))
+
+    def flush(self) -> bytes:
+        out = self.step(len(self.semantic)) if len(self.semantic) > self.committed else b""
+        if self.hold is not None and self.hold.size:
+            out += _pcm16_bytes(self.hold)
+            self.hold = None
+        return out
 
 
 async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
@@ -288,8 +330,10 @@ async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
 
     global_ids: list = []
     semantic: list = []
-    emitted = 0
     buffer = ""
+    streamer = _CrossfadeStreamer(
+        vocoder, global_ids, semantic, context_tokens, config.stream_xfade_samples
+    )
 
     async for piece in state["llama"].stream_generate(
         prompt,
@@ -307,17 +351,14 @@ async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
                 (global_ids if kind == "global" else semantic).append(num)
             buffer = buffer[matches[-1].end():]
 
-        while len(semantic) - emitted >= chunk_tokens and global_ids:
-            chunk = _decode_overlap(vocoder, global_ids, semantic, emitted, len(semantic), context_tokens)
-            emitted = len(semantic)
-            if chunk.size:
-                yield _pcm16_bytes(chunk)
+        while len(semantic) - streamer.committed >= chunk_tokens and global_ids:
+            data = streamer.step(len(semantic))
+            if data:
+                yield data
 
-    # Flush the final partial chunk.
-    if len(semantic) > emitted and global_ids:
-        chunk = _decode_overlap(vocoder, global_ids, semantic, emitted, len(semantic), context_tokens)
-        if chunk.size:
-            yield _pcm16_bytes(chunk)
+    data = streamer.flush()
+    if data:
+        yield data
 
 
 @app.get("/health")
