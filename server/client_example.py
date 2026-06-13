@@ -18,6 +18,10 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=50)
     parser.add_argument("--top-p", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument(
+        "--stream", action="store_true",
+        help="Stream audio in real time (writes raw s16le PCM to --out)",
+    )
     args = parser.parse_args()
 
     payload = {
@@ -29,6 +33,26 @@ def main() -> None:
     }
     if args.seed is not None:
         payload["seed"] = args.seed
+
+    if args.stream:
+        payload["response_format"] = "pcm"
+        first = True
+        total = 0
+        with httpx.Client(timeout=300) as client:
+            with client.stream("POST", f"{args.url}/tts/stream", json=payload) as resp:
+                resp.raise_for_status()
+                sr = resp.headers.get("X-Sample-Rate", "16000")
+                with open(args.out, "wb") as f:
+                    for chunk in resp.iter_bytes():
+                        if first and chunk:
+                            print("first audio chunk received")
+                            first = False
+                        total += len(chunk)
+                        f.write(chunk)
+        print(f"Streamed {total} bytes of PCM to {args.out} "
+              f"(~{total / 2 / int(sr):.2f}s @ {sr} Hz). "
+              f"Play: ffplay -f s16le -ar {sr} -nodisp -autoexit {args.out}")
+        return
 
     with httpx.Client(timeout=300) as client:
         resp = client.post(f"{args.url}/tts", json=payload)
