@@ -162,6 +162,10 @@ ffmpeg -f s16le -ar 16000 -ac 1 -i out.pcm out.wav
 
 Lower `chunk_tokens` (e.g. 10–15) for snappier first-audio latency; raise `context_tokens` if you hear faint clicks at chunk boundaries.
 
+**Seamless playback.** Two things keep speech continuous rather than "cut … cut …":
+- *Server-side crossfade* — consecutive chunks are decoded in different contexts, so their waveforms don't line up exactly at the seam. The server holds back the last `TTS_STREAM_XFADE_SAMPLES` (~24 ms) of each chunk and crossfades it with the same region re-decoded on the next chunk, removing the click.
+- *Client-side pre-roll buffer* — llama.cpp emits tokens in bursts and (on CPU) often slower than real time, which starves naive immediate playback. The dashboard buffers a configurable amount of audio (**Buffer (s)**, default 1.2 s) before starting, so brief stalls don't cause gaps. If you still see **Underruns** climbing on the dashboard, raise the buffer or use a faster (GPU) llama.cpp backend.
+
 ### `POST /v1/audio/speech` (OpenAI-compatible)
 
 Drop-in for the [OpenAI TTS API](https://platform.openai.com/docs/api-reference/audio/createSpeech) — point existing OpenAI-SDK code at this server by changing only `base_url`. `model` is accepted and ignored; `voice` is a **native speaker id/name** (`SPEAKER_3` or `Bourama`) — voices are not renamed to OpenAI's.
