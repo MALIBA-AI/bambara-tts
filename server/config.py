@@ -37,6 +37,10 @@ class Config:
     # ~50 tokens/sec, so 25 tokens ~= 0.5s of audio per emitted chunk.
     stream_chunk_tokens: int = int(os.getenv("TTS_STREAM_CHUNK_TOKENS", "25"))
     stream_context_tokens: int = int(os.getenv("TTS_STREAM_CONTEXT_TOKENS", "16"))
+    # Samples crossfaded between consecutive chunks to remove seam clicks
+    # (the same region is decoded twice, in different contexts, and blended).
+    # ~24 ms at 16 kHz.
+    stream_xfade_samples: int = int(os.getenv("TTS_STREAM_XFADE_SAMPLES", "384"))
 
     # Normalize input text before building the prompt.
     normalize: bool = _get_bool("TTS_NORMALIZE", True)
