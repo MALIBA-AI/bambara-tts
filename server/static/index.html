@@ -108,10 +108,65 @@ const els = {
   sUnder:$("s-under"), sBytes:$("s-bytes"), viz:$("viz"),
 };
 
-let ctx, analyser, reader, controller;
-let playing = false, started = false, nextTime = 0, leftover = new Uint8Array(0);
+// --- Ring-buffer audio worklet -------------------------------------------- //
+// A sample-accurate player: the main thread feeds Float32 PCM, the worklet
+// pulls one sample per output frame and only emits silence on true starvation.
+// This avoids the per-chunk resampling clicks and the hard gaps you get when
+// scheduling many small AudioBufferSourceNodes.
+const WORKLET_CODE = `
+class PCMPlayer extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.q = [];          // queue of Float32Array chunks
+    this.ri = 0;          // read index into q[0]
+    this.total = 0;       // running count of buffered samples
+    this.empty = true;
+    this.ticks = 0;
+    this.port.onmessage = (e) => {
+      const d = e.data;
+      if (d === 'reset') { this.q = []; this.ri = 0; this.total = 0; this.empty = true; return; }
+      this.q.push(d); this.total += d.length;
+    };
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    for (let i = 0; i < out.length; i++) {
+      if (this.q.length === 0) {
+        out[i] = 0;
+        if (!this.empty) { this.empty = true; this.port.postMessage({ t: 'underrun' }); }
+      } else {
+        this.empty = false;
+        const c = this.q[0];
+        out[i] = c[this.ri++];
+        this.total--;
+        if (this.ri >= c.length) { this.q.shift(); this.ri = 0; }
+      }
+    }
+    if ((this.ticks++ & 15) === 0) this.port.postMessage({ t: 'level', buffered: this.total });
+    return true;
+  }
+}
+registerProcessor('pcm-player', PCMPlayer);
+`;
+
+let ctx, analyser, player, reader, controller;
+let playing = false, started = false, leftover = new Uint8Array(0);
 let recvSeconds = 0, totalBytes = 0, rafId = null, underruns = 0, prerollSec = 1.2;
-let pending = [], queuedSec = 0; // pre-roll queue (audio buffered before playback starts)
+let pending = [], queuedSec = 0;     // pre-roll queue before playback starts
+let ctxRate = 16000, aheadSec = 0;   // actual context rate, buffered-ahead estimate
+
+// Linear resample (only used if the browser won't give a 16 kHz context).
+function resample(f32, from, to) {
+  if (from === to) return f32;
+  const ratio = to / from;
+  const out = new Float32Array(Math.round(f32.length * ratio));
+  for (let i = 0; i < out.length; i++) {
+    const x = i / ratio, i0 = Math.floor(x), i1 = Math.min(i0 + 1, f32.length - 1);
+    out[i] = f32[i0] + (f32[i1] - f32[i0]) * (x - i0);
+  }
+  return out;
+}
 
 // Populate speakers from the API (falls back to SPEAKER_1..10).
 async function loadSpeakers() {
@@ -142,48 +197,33 @@ function enqueuePCM(uint8) {
   if (nSamples === 0) return;
 
   const int16 = new Int16Array(buf.buffer, 0, nSamples);
-  const f32 = new Float32Array(nSamples);
+  let f32 = new Float32Array(nSamples);
   for (let i = 0; i < nSamples; i++) f32[i] = int16[i] / 32768;
+  if (ctxRate !== SR) f32 = resample(f32, SR, ctxRate);
 
-  const ab = ctx.createBuffer(1, nSamples, SR);
-  ab.copyToChannel(f32, 0);
-
-  recvSeconds += ab.duration;
+  recvSeconds += nSamples / SR;
   els.sRecv.textContent = recvSeconds.toFixed(2) + " s";
 
   if (!started) {
-    // Pre-roll: build up `prerollSec` of *buffered audio* before starting
-    // playback, so bursty / slower-than-real-time generation doesn't starve
-    // the output. This is what keeps speech continuous instead of "cut cut".
-    pending.push(ab);
-    queuedSec += ab.duration;
+    // Pre-roll: accumulate `prerollSec` of audio before we start feeding the
+    // player, so bursty / slower-than-real-time generation doesn't starve it.
+    pending.push(f32);
+    queuedSec += nSamples / SR;
     if (queuedSec >= prerollSec) startPlayback();
   } else {
-    scheduleBuffer(ab);
+    feed(f32);
   }
+}
+
+function feed(f32) {
+  player.port.postMessage(f32, [f32.buffer]); // transfer ownership (zero-copy)
 }
 
 function startPlayback() {
-  if (started) return;
+  if (started || !player) return;
   started = true;
-  nextTime = ctx.currentTime + 0.05;
-  for (const ab of pending) scheduleBuffer(ab);
+  for (const f32 of pending) feed(f32);
   pending = []; queuedSec = 0;
-}
-
-function scheduleBuffer(ab) {
-  const node = ctx.createBufferSource();
-  node.buffer = ab;
-  node.connect(analyser);
-  const now = ctx.currentTime;
-  if (nextTime < now) {
-    // Ran out of buffered audio (generation slower than playback).
-    nextTime = now;
-    underruns++;
-    els.sUnder.textContent = underruns;
-  }
-  node.start(nextTime);
-  nextTime += ab.duration;
 }
 
 function drawViz() {
@@ -201,8 +241,7 @@ function drawViz() {
       i === 0 ? g.moveTo(0, y) : g.lineTo(i * step, y);
     }
     g.stroke();
-    const ahead = Math.max(0, nextTime - ctx.currentTime);
-    els.sAhead.textContent = ahead.toFixed(2) + " s";
+    els.sAhead.textContent = aheadSec.toFixed(2) + " s";
   };
   loop();
 }
@@ -210,16 +249,32 @@ function drawViz() {
 async function speak() {
   stop();
   els.go.disabled = true; els.stop.disabled = false;
-  leftover = new Uint8Array(0); recvSeconds = 0; totalBytes = 0; nextTime = 0;
+  leftover = new Uint8Array(0); recvSeconds = 0; totalBytes = 0; aheadSec = 0;
   started = false; underruns = 0; pending = []; queuedSec = 0;
   prerollSec = Math.max(0, parseFloat(els.preroll.value) || 0);
   els.sFirst.textContent = "…"; els.sRecv.textContent = "0.00 s";
   els.sUnder.textContent = "0"; els.sBytes.textContent = "0 KB";
 
-  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  // Prefer a native 16 kHz context so PCM is never resampled per-chunk.
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try { ctx = new AC({ sampleRate: SR }); } catch (_) { ctx = new AC(); }
+  ctxRate = ctx.sampleRate;
   await ctx.resume();
+
+  const blobUrl = URL.createObjectURL(new Blob([WORKLET_CODE], { type: "application/javascript" }));
+  await ctx.audioWorklet.addModule(blobUrl);
+  URL.revokeObjectURL(blobUrl);
+
+  player = new AudioWorkletNode(ctx, "pcm-player", {
+    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+  });
+  player.port.onmessage = (e) => {
+    const d = e.data;
+    if (d.t === "underrun") { underruns++; els.sUnder.textContent = underruns; }
+    else if (d.t === "level") { aheadSec = d.buffered / ctxRate; }
+  };
   analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
-  analyser.connect(ctx.destination);
+  player.connect(analyser); analyser.connect(ctx.destination);
   drawViz();
 
   const body = {
@@ -283,7 +338,9 @@ function stop() {
   try { controller && controller.abort(); } catch (_) {}
   try { reader && reader.cancel(); } catch (_) {}
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (player) { try { player.port.postMessage("reset"); player.disconnect(); } catch (_) {} player = null; }
   if (ctx) { try { ctx.close(); } catch (_) {} ctx = null; }
+  started = false; pending = []; queuedSec = 0;
   finish();
   if (els.dot.className.indexOf("err") < 0) setState("idle");
 }
