@@ -1,16 +1,3 @@
-"""Bambara TTS gateway.
-
-Flow for one synthesis request:
-
-    text  -> normalize -> build Spark-TTS prompt
-          -> llama.cpp /completion  (LLM emits bicodec_* tokens)
-          -> parse global + semantic token ids
-          -> BiCodec vocoder        (tokens -> waveform)
-          -> WAV bytes
-
-The LLM runs in a separate llama.cpp process; the BiCodec vocoder runs in-process
-here (it is the part llama.cpp cannot serve).
-"""
 
 import io
 import logging
@@ -32,7 +19,7 @@ from server.vocoder import BiCodecVocoder
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("bambara-tts")
 
-# Populated on startup.
+
 state: dict = {}
 
 
@@ -87,24 +74,34 @@ def _maybe_normalize(text: str, normalize: Optional[bool]) -> str:
     return normalize_text(text)
 
 
-async def _synthesize(req: TTSRequest) -> np.ndarray:
-    if not req.text or not req.text.strip():
+async def _run_tts(
+    *,
+    text: str,
+    speaker: str,
+    temperature: float,
+    top_k: int,
+    top_p: float,
+    max_tokens: int,
+    seed: Optional[int],
+    normalize: Optional[bool],
+) -> np.ndarray:
+    if not text or not text.strip():
         raise HTTPException(status_code=400, detail="text can not be empty")
 
-    speaker_id = _resolve_speaker(req.speaker)
-    text = _maybe_normalize(req.text, req.normalize)
-    prompt = build_prompt(f"{speaker_id}: {text}")
+    speaker_id = _resolve_speaker(speaker)
+    normalized = _maybe_normalize(text, normalize)
+    prompt = build_prompt(f"{speaker_id}: {normalized}")
 
     try:
         generated = await state["llama"].generate(
             prompt,
-            max_tokens=req.max_tokens,
-            temperature=req.temperature,
-            top_k=req.top_k,
-            top_p=req.top_p,
-            seed=req.seed,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            seed=seed,
         )
-    except Exception as exc:  # llama.cpp unreachable / errored
+    except Exception as exc:  
         logger.exception("llama.cpp generation failed")
         raise HTTPException(status_code=502, detail=f"LLM backend error: {exc}")
 
@@ -121,10 +118,90 @@ async def _synthesize(req: TTSRequest) -> np.ndarray:
     return wav
 
 
+async def _synthesize(req: TTSRequest) -> np.ndarray:
+    return await _run_tts(
+        text=req.text,
+        speaker=req.speaker,
+        temperature=req.temperature,
+        top_k=req.top_k,
+        top_p=req.top_p,
+        max_tokens=req.max_tokens,
+        seed=req.seed,
+        normalize=req.normalize,
+    )
+
+
+def _apply_speed(wav: np.ndarray, speed: float) -> np.ndarray:
+    """Time-stretch the waveform (pitch-preserving) for OpenAI-style `speed`."""
+    if speed is None or abs(speed - 1.0) < 1e-3:
+        return wav
+    import librosa
+
+    return librosa.effects.time_stretch(np.ascontiguousarray(wav), rate=speed)
+
+
+_SNDFILE_FORMATS = {
+    "wav": ("WAV", "PCM_16", "audio/wav"),
+    "flac": ("FLAC", "PCM_16", "audio/flac"),
+    "opus": ("OGG", "OPUS", "audio/ogg"),
+}
+_FFMPEG_FORMATS = {
+    "mp3": (["-f", "mp3"], "audio/mpeg"),
+    "aac": (["-f", "adts"], "audio/aac"),
+}
+
+
 def _wav_bytes(wav: np.ndarray, sample_rate: int) -> bytes:
     buf = io.BytesIO()
     sf.write(buf, wav, sample_rate, format="WAV", subtype="PCM_16")
     return buf.getvalue()
+
+
+def _encode_audio(wav: np.ndarray, sample_rate: int, response_format: str):
+    """Encode a waveform to the requested format.
+
+    Returns (audio_bytes, media_type, actual_format). Falls back to wav if the
+    requested format cannot be produced in this environment.
+    """
+    fmt = (response_format or "wav").lower()
+
+    if fmt == "pcm":  
+        pcm = np.clip(wav, -1.0, 1.0)
+        return (pcm * 32767.0).astype("<i2").tobytes(), "audio/pcm", "pcm"
+
+    if fmt in _SNDFILE_FORMATS:
+        sf_format, subtype, media = _SNDFILE_FORMATS[fmt]
+        try:
+            buf = io.BytesIO()
+            sf.write(buf, wav, sample_rate, format=sf_format, subtype=subtype)
+            return buf.getvalue(), media, fmt
+        except Exception:
+            logger.warning("libsndfile cannot encode %s; falling back to wav", fmt)
+            return _wav_bytes(wav, sample_rate), "audio/wav", "wav"
+
+    if fmt in _FFMPEG_FORMATS:
+        args, media = _FFMPEG_FORMATS[fmt]
+        encoded = _ffmpeg_encode(_wav_bytes(wav, sample_rate), args)
+        if encoded is not None:
+            return encoded, media, fmt
+        logger.warning("ffmpeg unavailable; falling back to wav for %s", fmt)
+        return _wav_bytes(wav, sample_rate), "audio/wav", "wav"
+
+    return _wav_bytes(wav, sample_rate), "audio/wav", "wav"
+
+
+def _ffmpeg_encode(wav_bytes: bytes, ffmpeg_args: list):
+    import shutil
+    import subprocess
+
+    if shutil.which("ffmpeg") is None:
+        return None
+    cmd = ["ffmpeg", "-loglevel", "error", "-i", "pipe:0", *ffmpeg_args, "pipe:1"]
+    proc = subprocess.run(cmd, input=wav_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        logger.warning("ffmpeg encode failed: %s", proc.stderr.decode("utf-8", "ignore")[:200])
+        return None
+    return proc.stdout
 
 
 @app.get("/health")
@@ -185,6 +262,56 @@ async def tts_json(req: TTSRequest):
         "sample_rate": sample_rate,
         "duration_seconds": round(wav.shape[0] / sample_rate, 3),
         "num_samples": int(wav.shape[0]),
+    }
+
+
+
+class OpenAISpeechRequest(BaseModel):
+    model: str = Field("bambara-tts", description="Accepted for compatibility; ignored")
+    input: str = Field(..., description="Text to synthesize")
+    voice: str = Field("SPEAKER_1", description="Speaker id (SPEAKER_3) or name (Bourama)")
+    response_format: str = Field("mp3", description="mp3 | wav | flac | opus | aac | pcm")
+    speed: float = Field(1.0, ge=0.25, le=4.0, description="Playback speed (pitch preserved)")
+    temperature: Optional[float] = None
+    top_k: Optional[int] = None
+    top_p: Optional[float] = None
+    seed: Optional[int] = None
+
+
+@app.post("/v1/audio/speech")
+async def openai_audio_speech(req: OpenAISpeechRequest):
+    wav = await _run_tts(
+        text=req.input,
+        speaker=req.voice,
+        temperature=req.temperature if req.temperature is not None else config.default_temperature,
+        top_k=req.top_k if req.top_k is not None else config.default_top_k,
+        top_p=req.top_p if req.top_p is not None else config.default_top_p,
+        max_tokens=config.default_max_tokens,
+        seed=req.seed,
+        normalize=None,
+    )
+    wav = _apply_speed(wav, req.speed)
+    sample_rate = state["vocoder"].sample_rate
+    audio, media_type, actual_format = _encode_audio(wav, sample_rate, req.response_format)
+    return Response(
+        content=audio,
+        media_type=media_type,
+        headers={
+            "X-Sample-Rate": str(sample_rate),
+            "X-Audio-Duration": f"{wav.shape[0] / sample_rate:.3f}",
+            "X-Audio-Format": actual_format,
+            "Content-Disposition": f'inline; filename="speech.{actual_format}"',
+        },
+    )
+
+
+@app.get("/v1/models")
+async def openai_models():
+    return {
+        "object": "list",
+        "data": [
+            {"id": "bambara-tts", "object": "model", "owned_by": "MALIBA-AI"},
+        ],
     }
 
 
