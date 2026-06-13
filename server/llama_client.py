@@ -7,8 +7,9 @@ This module builds that prompt, calls llama.cpp, and parses the integers back
 out so the BiCodec vocoder can turn them into audio.
 """
 
+import json
 import re
-from typing import List, Optional, Tuple
+from typing import AsyncIterator, List, Optional, Tuple
 
 import httpx
 
@@ -74,6 +75,49 @@ class LlamaClient:
         resp.raise_for_status()
         data = resp.json()
         return data.get("content", "")
+
+    async def stream_generate(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int,
+        temperature: float,
+        top_k: int,
+        top_p: float,
+        seed: Optional[int] = None,
+    ) -> AsyncIterator[str]:
+        """Stream generated text pieces from llama.cpp as they are produced."""
+        payload = {
+            "prompt": prompt,
+            "n_predict": max_tokens,
+            "temperature": temperature,
+            "top_k": top_k,
+            "top_p": top_p,
+            "cache_prompt": True,
+            "stream": True,
+        }
+        if seed is not None:
+            payload["seed"] = seed
+
+        async with self._client.stream(
+            "POST", f"{self.base_url}/completion", json=payload
+        ) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[len("data:"):].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                piece = obj.get("content", "")
+                if piece:
+                    yield piece
+                if obj.get("stop"):
+                    break
 
     async def aclose(self) -> None:
         await self._client.aclose()
