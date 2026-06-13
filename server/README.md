@@ -71,7 +71,11 @@ python -m server.client_example --text "Aw ni ce" --speaker Bourama --out hello.
 
 ## Live dashboard
 
-Open **`http://localhost:8000/`** in a browser for a self-contained test page: type Bambara text, pick a speaker and sampling params, hit **Speak (stream)**, and the audio plays automatically as it streams in (Web Audio API). It shows a live waveform, the **time-to-first-audio**, seconds received, and how much is buffered ahead.
+Open **`http://localhost:8000/`** in a browser for a self-contained test page: type Bambara text, pick a speaker and sampling params, hit **Speak (stream)**, and the audio plays automatically as it streams in. It shows a live waveform, the **time-to-first-audio**, seconds received, buffered-ahead, and an **underrun** counter.
+
+Playback uses an **AudioWorklet ring buffer running at a native 16 kHz context** — the main thread feeds PCM and the worklet pulls one sample per frame, emitting silence only on genuine starvation. This avoids the two classic streaming glitches: per-chunk resampling clicks (fixed by the 16 kHz context) and hard gaps from scheduling many small buffers (fixed by the ring buffer + the **Buffer (s)** pre-roll).
+
+> AudioWorklet requires a **secure context** — `https://…` (e.g. an ngrok URL) or `http://localhost`. It will not run over plain `http://<ip>`.
 
 ## API
 
