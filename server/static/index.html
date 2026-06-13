@@ -69,6 +69,10 @@
         <label for="seed">Seed (optional)</label>
         <input id="seed" type="number" placeholder="random" />
       </div>
+      <div>
+        <label for="preroll" title="Audio buffered before playback starts. Higher = smoother, more initial delay.">Buffer (s)</label>
+        <input id="preroll" type="number" step="0.1" min="0" value="1.2" />
+      </div>
     </div>
 
     <div class="row" style="margin-top:18px;">
@@ -84,6 +88,7 @@
       <div class="stat"><div class="k">First audio</div><div class="v" id="s-first">—</div></div>
       <div class="stat"><div class="k">Audio received</div><div class="v" id="s-recv">0.00 s</div></div>
       <div class="stat"><div class="k">Buffered ahead</div><div class="v" id="s-ahead">0.00 s</div></div>
+      <div class="stat"><div class="k">Underruns</div><div class="v" id="s-under">0</div></div>
       <div class="stat"><div class="k">Data</div><div class="v" id="s-bytes">0 KB</div></div>
     </div>
     <div class="small" style="margin-top:10px;">
@@ -98,13 +103,15 @@ const SR = 16000; // server streams mono s16le @ 16 kHz
 const $ = (id) => document.getElementById(id);
 const els = {
   text:$("text"), speaker:$("speaker"), temp:$("temp"), topk:$("topk"), topp:$("topp"),
-  chunk:$("chunk"), seed:$("seed"), go:$("go"), stop:$("stop"), state:$("state"), dot:$("dot"),
-  sFirst:$("s-first"), sRecv:$("s-recv"), sAhead:$("s-ahead"), sBytes:$("s-bytes"), viz:$("viz"),
+  chunk:$("chunk"), seed:$("seed"), preroll:$("preroll"), go:$("go"), stop:$("stop"),
+  state:$("state"), dot:$("dot"), sFirst:$("s-first"), sRecv:$("s-recv"), sAhead:$("s-ahead"),
+  sUnder:$("s-under"), sBytes:$("s-bytes"), viz:$("viz"),
 };
 
 let ctx, analyser, reader, controller;
-let playing = false, nextTime = 0, leftover = new Uint8Array(0);
-let recvSeconds = 0, totalBytes = 0, rafId = null;
+let playing = false, started = false, nextTime = 0, leftover = new Uint8Array(0);
+let recvSeconds = 0, totalBytes = 0, rafId = null, underruns = 0, prerollSec = 1.2;
+let pending = [], queuedSec = 0; // pre-roll queue (audio buffered before playback starts)
 
 // Populate speakers from the API (falls back to SPEAKER_1..10).
 async function loadSpeakers() {
@@ -140,17 +147,43 @@ function enqueuePCM(uint8) {
 
   const ab = ctx.createBuffer(1, nSamples, SR);
   ab.copyToChannel(f32, 0);
-  const node = ctx.createBufferSource();
-  node.buffer = ab;
-  node.connect(analyser);
-
-  const now = ctx.currentTime;
-  if (nextTime < now) nextTime = now + 0.04; // resync after an underrun
-  node.start(nextTime);
-  nextTime += ab.duration;
 
   recvSeconds += ab.duration;
   els.sRecv.textContent = recvSeconds.toFixed(2) + " s";
+
+  if (!started) {
+    // Pre-roll: build up `prerollSec` of *buffered audio* before starting
+    // playback, so bursty / slower-than-real-time generation doesn't starve
+    // the output. This is what keeps speech continuous instead of "cut cut".
+    pending.push(ab);
+    queuedSec += ab.duration;
+    if (queuedSec >= prerollSec) startPlayback();
+  } else {
+    scheduleBuffer(ab);
+  }
+}
+
+function startPlayback() {
+  if (started) return;
+  started = true;
+  nextTime = ctx.currentTime + 0.05;
+  for (const ab of pending) scheduleBuffer(ab);
+  pending = []; queuedSec = 0;
+}
+
+function scheduleBuffer(ab) {
+  const node = ctx.createBufferSource();
+  node.buffer = ab;
+  node.connect(analyser);
+  const now = ctx.currentTime;
+  if (nextTime < now) {
+    // Ran out of buffered audio (generation slower than playback).
+    nextTime = now;
+    underruns++;
+    els.sUnder.textContent = underruns;
+  }
+  node.start(nextTime);
+  nextTime += ab.duration;
 }
 
 function drawViz() {
@@ -178,7 +211,10 @@ async function speak() {
   stop();
   els.go.disabled = true; els.stop.disabled = false;
   leftover = new Uint8Array(0); recvSeconds = 0; totalBytes = 0; nextTime = 0;
-  els.sFirst.textContent = "…"; els.sRecv.textContent = "0.00 s"; els.sBytes.textContent = "0 KB";
+  started = false; underruns = 0; pending = []; queuedSec = 0;
+  prerollSec = Math.max(0, parseFloat(els.preroll.value) || 0);
+  els.sFirst.textContent = "…"; els.sRecv.textContent = "0.00 s";
+  els.sUnder.textContent = "0"; els.sBytes.textContent = "0 KB";
 
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   await ctx.resume();
@@ -228,6 +264,7 @@ async function speak() {
       els.sBytes.textContent = (totalBytes / 1024).toFixed(1) + " KB";
       enqueuePCM(value);
     }
+    startPlayback(); // flush pre-roll queue if the utterance was shorter than the buffer
     if (playing) setState("done — playing out", "live");
   } catch (e) {
     if (e.name !== "AbortError") setState("error: " + e.message, "err");
@@ -242,6 +279,7 @@ function finish() {
 
 function stop() {
   playing = false;
+  pending = []; queuedSec = 0;
   try { controller && controller.abort(); } catch (_) {}
   try { reader && reader.cancel(); } catch (_) {}
   if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
