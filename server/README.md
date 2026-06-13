@@ -69,6 +69,10 @@ Then:
 python -m server.client_example --text "Aw ni ce" --speaker Bourama --out hello.wav
 ```
 
+## Live dashboard
+
+Open **`http://localhost:8000/`** in a browser for a self-contained test page: type Bambara text, pick a speaker and sampling params, hit **Speak (stream)**, and the audio plays automatically as it streams in (Web Audio API). It shows a live waveform, the **time-to-first-audio**, seconds received, and how much is buffered ahead.
+
 ## API
 
 ### `POST /tts` → `audio/wav`
@@ -122,6 +126,41 @@ curl -X POST localhost:8000/tts \
 
 ### `POST /tts/json`
 Same body, returns `{ audio_base64, format, sample_rate, duration_seconds, num_samples }`.
+
+### `POST /tts/stream` (real-time streaming)
+
+The model is autoregressive, so audio can start playing before generation finishes. llama.cpp streams tokens; the gateway collects the **global/speaker tokens first** (they are required to decode *anything*), then decodes the **semantic tokens in chunks** as they arrive and streams the audio out.
+
+Body is the same as `/tts` plus:
+
+| field | default | notes |
+|-------|---------|-------|
+| `response_format` | `pcm` | `pcm` (raw s16le mono) or `wav` (streaming header) |
+| `chunk_tokens` | `25` | emit audio every N new semantic tokens (~50 tok/s, so 25 ≈ 0.5 s). Lower = lower latency, more overhead |
+| `context_tokens` | `16` | left-context tokens decoded then trimmed to avoid clicks at chunk seams |
+
+**Token → audio:** semantic tokens run at ~50/sec, so each is ≈ **20 ms** (320 samples @ 16 kHz). First audio arrives once all global tokens + the first `chunk_tokens` semantic tokens are generated. The decoder measures samples-per-token from each decode, so timing is exact even if the codec's rate differs.
+
+Play straight from curl with ffplay:
+
+```bash
+curl -N -X POST localhost:8000/tts/stream \
+  -H 'content-type: application/json' \
+  -d '{"text":"Aw ni ce, i ka kɛnɛ wa?","speaker":"Bourama"}' \
+  | ffplay -f s16le -ar 16000 -nodisp -autoexit -
+```
+
+Or save the streamed PCM and convert:
+
+```bash
+curl -N -X POST localhost:8000/tts/stream \
+  -H 'content-type: application/json' \
+  -d '{"text":"Aw ni ce","speaker":"Bourama","chunk_tokens":15}' \
+  --output out.pcm
+ffmpeg -f s16le -ar 16000 -ac 1 -i out.pcm out.wav
+```
+
+Lower `chunk_tokens` (e.g. 10–15) for snappier first-audio latency; raise `context_tokens` if you hear faint clicks at chunk boundaries.
 
 ### `POST /v1/audio/speech` (OpenAI-compatible)
 
