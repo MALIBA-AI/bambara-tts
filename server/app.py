@@ -77,6 +77,9 @@ class TTSStreamRequest(TTSRequest):
     split: Optional[bool] = Field(
         None, description="Split text on punctuation and synthesize sentence-by-sentence"
     )
+    lock_voice: Optional[bool] = Field(
+        None, description="Reuse the first sentence's speaker tokens so the voice stays consistent"
+    )
 
 
 def _resolve_speaker(speaker: str) -> str:
@@ -349,19 +352,38 @@ def _silence_pcm(ms: int, sample_rate: int) -> bytes:
     return b"\x00\x00" * int(sample_rate * ms / 1000)
 
 
-async def _stream_sentence(content: str, req: TTSStreamRequest) -> AsyncIterator[bytes]:
+async def _stream_sentence(
+    content: str,
+    req: TTSStreamRequest,
+    fixed_global_ids: Optional[list] = None,
+    out: Optional[dict] = None,
+) -> AsyncIterator[bytes]:
     """Generate + stream PCM for a single already-formatted sentence.
 
     Token-reading (from llama.cpp) and BiCodec decoding run concurrently: a
     producer task keeps pulling tokens while each ready chunk is decoded in a
     worker thread, so generation and decoding overlap.
+
+    If ``fixed_global_ids`` is given, those speaker tokens are injected into the
+    prompt so the model only generates semantic tokens and the voice stays
+    identical to the first sentence. When ``out`` is provided (and the voice is
+    not fixed), the generated global tokens are written back to ``out`` so the
+    caller can reuse them for the next sentences.
     """
     vocoder = state["vocoder"]
     chunk_tokens = req.chunk_tokens or config.stream_chunk_tokens
     context_tokens = req.context_tokens if req.context_tokens is not None else config.stream_context_tokens
-    prompt = build_prompt(content)
+    locked = bool(fixed_global_ids)
 
-    global_ids: list = []
+    if locked:
+        # Provide the speaker tokens and let the model continue from semantics.
+        prefix = "".join(f"<|bicodec_global_{g}|>" for g in fixed_global_ids)
+        prompt = build_prompt(content) + prefix + "<|end_global_token|><|start_semantic_token|>"
+        global_ids: list = list(fixed_global_ids)
+    else:
+        prompt = build_prompt(content)
+        global_ids = []
+
     semantic: list = []
     streamer = _CrossfadeStreamer(
         vocoder, global_ids, semantic, context_tokens, config.stream_xfade_samples
@@ -390,7 +412,11 @@ async def _stream_sentence(content: str, req: TTSStreamRequest) -> AsyncIterator
                 if matches:
                     for m in matches:
                         kind, num = m.group(1), int(m.group(2))
-                        (global_ids if kind == "global" else semantic).append(num)
+                        if kind == "global":
+                            if not locked:  # ignore any stray globals when fixed
+                                global_ids.append(num)
+                        else:
+                            semantic.append(num)
                     buffer = buffer[matches[-1].end():]
                     new_data.set()
         except Exception as exc:  # noqa: BLE001
@@ -413,6 +439,8 @@ async def _stream_sentence(content: str, req: TTSStreamRequest) -> AsyncIterator
             new_data.clear()
             await new_data.wait()
 
+        if out is not None and not locked:
+            out["global_ids"] = list(global_ids)
         data = await asyncio.to_thread(streamer.flush)
         if data:
             yield data
@@ -447,11 +475,19 @@ async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
     if req.response_format.lower() == "wav":
         yield _streaming_wav_header(sample_rate)
 
+    lock_voice = config.stream_lock_voice if req.lock_voice is None else req.lock_voice
+    fixed_globals: Optional[list] = None
+
     for i, sentence in enumerate(sentences):
         if i and gap:
             yield gap
-        async for data in _stream_sentence(f"{speaker_id}: {sentence}", req):
+        captured: dict = {}
+        async for data in _stream_sentence(
+            f"{speaker_id}: {sentence}", req, fixed_global_ids=fixed_globals, out=captured
+        ):
             yield data
+        if lock_voice and fixed_globals is None:
+            fixed_globals = captured.get("global_ids") or None
 
 
 @app.get("/health")
