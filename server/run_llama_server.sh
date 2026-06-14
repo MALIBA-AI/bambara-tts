@@ -10,7 +10,7 @@ MODEL_PATH="${MODEL_PATH:-models/bambara-tts-Q4_K_M.gguf}"
 HOST="${LLAMA_HOST:-0.0.0.0}"
 PORT="${LLAMA_PORT:-8080}"
 CTX="${LLAMA_CTX:-4096}"
-NGL="${LLAMA_NGL:-0}"        # GPU layers; 0 = CPU only
+NGL="${LLAMA_NGL:-99}"       # GPU layers to offload; 0 = CPU only, 99 = all
 PARALLEL="${LLAMA_PARALLEL:-1}"
 
 if [ ! -f "$MODEL_PATH" ]; then

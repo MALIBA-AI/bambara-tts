@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Bambara TTS — Live Stream Test</title>
+<style>
+  :root { --bg:#0e1116; --panel:#171b22; --acc:#4ade80; --acc2:#22d3ee; --txt:#e6edf3; --mut:#8b949e; --bd:#232a33; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+         background:var(--bg); color:var(--txt); }
+  .wrap { max-width:860px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:22px; }
+  .panel { background:var(--panel); border:1px solid var(--bd); border-radius:12px; padding:18px; margin-bottom:18px; }
+  label { display:block; font-size:12px; color:var(--mut); margin:0 0 6px; text-transform:uppercase; letter-spacing:.04em; }
+  textarea, select, input { width:100%; background:#0d1117; color:var(--txt); border:1px solid var(--bd);
+        border-radius:8px; padding:10px 12px; font-size:14px; font-family:inherit; }
+  textarea { resize:vertical; min-height:74px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; margin-top:14px; }
+  .row { display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; }
+  .btn { border:none; border-radius:9px; padding:12px 22px; font-size:15px; font-weight:600; cursor:pointer; }
+  .btn-go { background:var(--acc); color:#06210f; }
+  .btn-go:disabled { opacity:.45; cursor:not-allowed; }
+  .btn-stop { background:#2b313b; color:var(--txt); }
+  canvas { width:100%; height:120px; background:#0d1117; border:1px solid var(--bd); border-radius:10px; display:block; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-top:14px; }
+  .stat { background:#0d1117; border:1px solid var(--bd); border-radius:9px; padding:10px 12px; }
+  .stat .k { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .stat .v { font-size:18px; font-weight:600; margin-top:3px; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#444; margin-right:7px; vertical-align:middle; }
+  .dot.live { background:var(--acc); box-shadow:0 0 8px var(--acc); }
+  .dot.err  { background:#f87171; }
+  .small { font-size:12px; color:var(--mut); }
+  a { color:var(--acc2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎙️ Bambara TTS — Live Stream Test</h1>
+  <div class="sub">Streams raw PCM from <code>/tts/stream</code> and plays it in real time via the Web Audio API.</div>
+
+  <div class="panel">
+    <label for="text">Text (Bambara)</label>
+    <textarea id="text">Aw ni ce, i ka kɛnɛ wa? Ne tɔgɔ ye Adama, ne ye maliden de ye.</textarea>
+
+    <div class="grid">
+      <div>
+        <label for="speaker">Speaker</label>
+        <select id="speaker"></select>
+      </div>
+      <div>
+        <label for="temp">Temperature</label>
+        <input id="temp" type="number" step="0.05" min="0" max="2" value="0.8" />
+      </div>
+      <div>
+        <label for="topk">Top-k</label>
+        <input id="topk" type="number" min="0" value="50" />
+      </div>
+      <div>
+        <label for="topp">Top-p</label>
+        <input id="topp" type="number" step="0.05" min="0" max="1" value="1.0" />
+      </div>
+      <div>
+        <label for="chunk">Chunk tokens</label>
+        <input id="chunk" type="number" min="1" value="25" />
+      </div>
+      <div>
+        <label for="seed">Seed (optional)</label>
+        <input id="seed" type="number" placeholder="random" />
+      </div>
+      <div>
+        <label for="preroll" title="Audio buffered before playback starts. Higher = smoother, more initial delay.">Buffer (s)</label>
+        <input id="preroll" type="number" step="0.1" min="0" value="1.2" />
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:18px;">
+      <button id="go" class="btn btn-go">▶ Speak (stream)</button>
+      <button id="stop" class="btn btn-stop" disabled>■ Stop</button>
+      <span class="small"><span id="dot" class="dot"></span><span id="state">idle</span></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <canvas id="viz" width="820" height="120"></canvas>
+    <div class="stats">
+      <div class="stat"><div class="k">First audio</div><div class="v" id="s-first">—</div></div>
+      <div class="stat"><div class="k">Audio received</div><div class="v" id="s-recv">0.00 s</div></div>
+      <div class="stat"><div class="k">Buffered ahead</div><div class="v" id="s-ahead">0.00 s</div></div>
+      <div class="stat"><div class="k">Underruns</div><div class="v" id="s-under">0</div></div>
+      <div class="stat"><div class="k">Data</div><div class="v" id="s-bytes">0 KB</div></div>
+    </div>
+    <div class="small" style="margin-top:10px;">
+      Tip: lower <b>chunk tokens</b> (10–15) for snappier first audio. If generation is slower than
+      real time (common on CPU), you may hear short gaps — that's the model, not the stream.
+    </div>
+  </div>
+</div>
+
+<script>
+const SR = 16000; // server streams mono s16le @ 16 kHz
+const $ = (id) => document.getElementById(id);
+const els = {
+  text:$("text"), speaker:$("speaker"), temp:$("temp"), topk:$("topk"), topp:$("topp"),
+  chunk:$("chunk"), seed:$("seed"), preroll:$("preroll"), go:$("go"), stop:$("stop"),
+  state:$("state"), dot:$("dot"), sFirst:$("s-first"), sRecv:$("s-recv"), sAhead:$("s-ahead"),
+  sUnder:$("s-under"), sBytes:$("s-bytes"), viz:$("viz"),
+};
+
+// --- Ring-buffer audio worklet -------------------------------------------- //
+// A sample-accurate player: the main thread feeds Float32 PCM, the worklet
+// pulls one sample per output frame and only emits silence on true starvation.
+// This avoids the per-chunk resampling clicks and the hard gaps you get when
+// scheduling many small AudioBufferSourceNodes.
+const WORKLET_CODE = `
+class PCMPlayer extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.q = [];          // queue of Float32Array chunks
+    this.ri = 0;          // read index into q[0]
+    this.total = 0;       // running count of buffered samples
+    this.empty = true;
+    this.ticks = 0;
+    this.port.onmessage = (e) => {
+      const d = e.data;
+      if (d === 'reset') { this.q = []; this.ri = 0; this.total = 0; this.empty = true; return; }
+      this.q.push(d); this.total += d.length;
+    };
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    for (let i = 0; i < out.length; i++) {
+      if (this.q.length === 0) {
+        out[i] = 0;
+        if (!this.empty) { this.empty = true; this.port.postMessage({ t: 'underrun' }); }
+      } else {
+        this.empty = false;
+        const c = this.q[0];
+        out[i] = c[this.ri++];
+        this.total--;
+        if (this.ri >= c.length) { this.q.shift(); this.ri = 0; }
+      }
+    }
+    if ((this.ticks++ & 15) === 0) this.port.postMessage({ t: 'level', buffered: this.total });
+    return true;
+  }
+}
+registerProcessor('pcm-player', PCMPlayer);
+`;
+
+let ctx, analyser, player, reader, controller;
+let playing = false, started = false, leftover = new Uint8Array(0);
+let recvSeconds = 0, totalBytes = 0, rafId = null, underruns = 0, prerollSec = 1.2;
+let pending = [], queuedSec = 0;     // pre-roll queue before playback starts
+let ctxRate = 16000, aheadSec = 0;   // actual context rate, buffered-ahead estimate
+
+// Linear resample (only used if the browser won't give a 16 kHz context).
+function resample(f32, from, to) {
+  if (from === to) return f32;
+  const ratio = to / from;
+  const out = new Float32Array(Math.round(f32.length * ratio));
+  for (let i = 0; i < out.length; i++) {
+    const x = i / ratio, i0 = Math.floor(x), i1 = Math.min(i0 + 1, f32.length - 1);
+    out[i] = f32[i0] + (f32[i1] - f32[i0]) * (x - i0);
+  }
+  return out;
+}
+
+// Populate speakers from the API (falls back to SPEAKER_1..10).
+async function loadSpeakers() {
+  let list = [];
+  try {
+    const r = await fetch("/speakers");
+    list = (await r.json()).speakers || [];
+  } catch (_) {}
+  if (!list.length) list = Array.from({length:10}, (_,i)=>({name:"SPEAKER_"+(i+1), id:"SPEAKER_"+(i+1)}));
+  els.speaker.innerHTML = list.map(s =>
+    `<option value="${s.id}">${s.name} (${s.id})</option>`).join("");
+  // default to Bourama if present (most stable)
+  const b = [...els.speaker.options].find(o => /Bourama/i.test(o.text));
+  if (b) els.speaker.value = b.value;
+}
+
+function setState(txt, cls) {
+  els.state.textContent = txt;
+  els.dot.className = "dot" + (cls ? " " + cls : "");
+}
+
+function enqueuePCM(uint8) {
+  // Concatenate leftover (odd byte) + new bytes, keep whole samples only.
+  const buf = new Uint8Array(leftover.length + uint8.length);
+  buf.set(leftover, 0); buf.set(uint8, leftover.length);
+  const nSamples = Math.floor(buf.length / 2);
+  leftover = buf.slice(nSamples * 2);
+  if (nSamples === 0) return;
+
+  const int16 = new Int16Array(buf.buffer, 0, nSamples);
+  let f32 = new Float32Array(nSamples);
+  for (let i = 0; i < nSamples; i++) f32[i] = int16[i] / 32768;
+  if (ctxRate !== SR) f32 = resample(f32, SR, ctxRate);
+
+  recvSeconds += nSamples / SR;
+  els.sRecv.textContent = recvSeconds.toFixed(2) + " s";
+
+  if (!started) {
+    // Pre-roll: accumulate `prerollSec` of audio before we start feeding the
+    // player, so bursty / slower-than-real-time generation doesn't starve it.
+    pending.push(f32);
+    queuedSec += nSamples / SR;
+    if (queuedSec >= prerollSec) startPlayback();
+  } else {
+    feed(f32);
+  }
+}
+
+function feed(f32) {
+  player.port.postMessage(f32, [f32.buffer]); // transfer ownership (zero-copy)
+}
+
+function startPlayback() {
+  if (started || !player) return;
+  started = true;
+  for (const f32 of pending) feed(f32);
+  pending = []; queuedSec = 0;
+}
+
+function drawViz() {
+  const c = els.viz, g = c.getContext("2d");
+  const W = c.width, H = c.height;
+  const data = new Uint8Array(analyser.fftSize);
+  const loop = () => {
+    rafId = requestAnimationFrame(loop);
+    analyser.getByteTimeDomainData(data);
+    g.fillStyle = "#0d1117"; g.fillRect(0, 0, W, H);
+    g.lineWidth = 2; g.strokeStyle = "#4ade80"; g.beginPath();
+    const step = W / data.length;
+    for (let i = 0; i < data.length; i++) {
+      const y = (data[i] / 255) * H;
+      i === 0 ? g.moveTo(0, y) : g.lineTo(i * step, y);
+    }
+    g.stroke();
+    els.sAhead.textContent = aheadSec.toFixed(2) + " s";
+  };
+  loop();
+}
+
+async function speak() {
+  stop();
+  els.go.disabled = true; els.stop.disabled = false;
+  leftover = new Uint8Array(0); recvSeconds = 0; totalBytes = 0; aheadSec = 0;
+  started = false; underruns = 0; pending = []; queuedSec = 0;
+  prerollSec = Math.max(0, parseFloat(els.preroll.value) || 0);
+  els.sFirst.textContent = "…"; els.sRecv.textContent = "0.00 s";
+  els.sUnder.textContent = "0"; els.sBytes.textContent = "0 KB";
+
+  // Prefer a native 16 kHz context so PCM is never resampled per-chunk.
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try { ctx = new AC({ sampleRate: SR }); } catch (_) { ctx = new AC(); }
+  ctxRate = ctx.sampleRate;
+  await ctx.resume();
+
+  const blobUrl = URL.createObjectURL(new Blob([WORKLET_CODE], { type: "application/javascript" }));
+  await ctx.audioWorklet.addModule(blobUrl);
+  URL.revokeObjectURL(blobUrl);
+
+  player = new AudioWorkletNode(ctx, "pcm-player", {
+    numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1],
+  });
+  player.port.onmessage = (e) => {
+    const d = e.data;
+    if (d.t === "underrun") { underruns++; els.sUnder.textContent = underruns; }
+    else if (d.t === "level") { aheadSec = d.buffered / ctxRate; }
+  };
+  analyser = ctx.createAnalyser(); analyser.fftSize = 1024;
+  player.connect(analyser); analyser.connect(ctx.destination);
+  drawViz();
+
+  const body = {
+    text: els.text.value,
+    speaker: els.speaker.value,
+    temperature: parseFloat(els.temp.value),
+    top_k: parseInt(els.topk.value),
+    top_p: parseFloat(els.topp.value),
+    chunk_tokens: parseInt(els.chunk.value),
+    response_format: "pcm",
+  };
+  if (els.seed.value !== "") body.seed = parseInt(els.seed.value);
+
+  setState("connecting…");
+  const t0 = performance.now();
+  let gotFirst = false;
+  playing = true;
+  controller = new AbortController();
+
+  try {
+    const resp = await fetch("/tts/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      setState("error " + resp.status + ": " + (await resp.text()).slice(0,120), "err");
+      finish(); return;
+    }
+    setState("streaming…", "live");
+    reader = resp.body.getReader();
+    while (playing) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || !value.length) continue;
+      if (!gotFirst) {
+        gotFirst = true;
+        els.sFirst.textContent = Math.round(performance.now() - t0) + " ms";
+      }
+      totalBytes += value.length;
+      els.sBytes.textContent = (totalBytes / 1024).toFixed(1) + " KB";
+      enqueuePCM(value);
+    }
+    startPlayback(); // flush pre-roll queue if the utterance was shorter than the buffer
+    if (playing) setState("done — playing out", "live");
+  } catch (e) {
+    if (e.name !== "AbortError") setState("error: " + e.message, "err");
+  }
+  finish();
+}
+
+function finish() {
+  playing = false;
+  els.go.disabled = false; els.stop.disabled = true;
+}
+
+function stop() {
+  playing = false;
+  pending = []; queuedSec = 0;
+  try { controller && controller.abort(); } catch (_) {}
+  try { reader && reader.cancel(); } catch (_) {}
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  if (player) { try { player.port.postMessage("reset"); player.disconnect(); } catch (_) {} player = null; }
+  if (ctx) { try { ctx.close(); } catch (_) {} ctx = null; }
+  started = false; pending = []; queuedSec = 0;
+  finish();
+  if (els.dot.className.indexOf("err") < 0) setState("idle");
+}
+
+els.go.onclick = speak;
+els.stop.onclick = stop;
+loadSpeakers();
+</script>
+</body>
+</html>

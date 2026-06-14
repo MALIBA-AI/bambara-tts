@@ -9,12 +9,22 @@
 
 services:
   llama:
-    image: ghcr.io/ggml-org/llama.cpp:server
+    # CUDA image (the plain :server tag is CPU-only). Requires the NVIDIA
+    # Container Toolkit on the host:  sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
     command: >
       --model /models/bambara-tts-Q4_K_M.gguf
       --host 0.0.0.0 --port 8080
       --ctx-size 4096 --parallel 2
+      --n-gpu-layers 99
       --special --no-webui
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     volumes:
       - ../models:/models:ro
     ports:
