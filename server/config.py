@@ -42,6 +42,13 @@ class Config:
     # ~24 ms at 16 kHz.
     stream_xfade_samples: int = int(os.getenv("TTS_STREAM_XFADE_SAMPLES", "384"))
 
+    # Split input on punctuation and synthesize sentence-by-sentence: lower
+    # time-to-first-audio, and any buffer underrun lands on a natural pause
+    # instead of mid-word. Gap of silence inserted between sentences (ms).
+    stream_split_sentences: bool = _get_bool("TTS_STREAM_SPLIT", True)
+    stream_sentence_gap_ms: int = int(os.getenv("TTS_STREAM_SENTENCE_GAP_MS", "120"))
+    stream_max_sentence_chars: int = int(os.getenv("TTS_STREAM_MAX_SENTENCE_CHARS", "200"))
+
     # Normalize input text before building the prompt.
     normalize: bool = _get_bool("TTS_NORMALIZE", True)
 
