@@ -29,23 +29,38 @@ from maliba_ai.sparktts.models.bicodec import BiCodec
 class BiCodecTokenizer:
     """BiCodec tokenizer for handling audio input and tokenization."""
 
-    def __init__(self, model_dir: Path, device: torch.device = None, **kwargs):
+    def __init__(
+        self,
+        model_dir: Path,
+        device: torch.device = None,
+        load_wav2vec2: bool = True,
+        **kwargs,
+    ):
         super().__init__()
         """
         Args:
             model_dir: Path to the model directory.
             device: Device to run the model on (default is GPU if available).
+            load_wav2vec2: If False, skip loading the wav2vec2 feature extractor.
+                It is only required for *encoding* reference audio (voice cloning /
+                ``tokenize``). Pure synthesis (``detokenize``) does not need it, so
+                a TTS inference server can save ~300M params of RAM/VRAM and a slow
+                download by passing ``False``.
         """
         self.device = device
         self.model_dir = model_dir
         self.config = load_config(f"{model_dir}/config.yaml")
-        self._initialize_model()
+        self.processor = None
+        self.feature_extractor = None
+        self._initialize_model(load_wav2vec2=load_wav2vec2)
 
-    def _initialize_model(self):
-        """Load and initialize the BiCodec model and Wav2Vec2 feature extractor."""
+    def _initialize_model(self, load_wav2vec2: bool = True):
+        """Load and initialize the BiCodec model and (optionally) Wav2Vec2."""
         self.model = BiCodec.load_from_checkpoint(f"{self.model_dir}/BiCodec").to(
             self.device
         )
+        if not load_wav2vec2:
+            return
         self.processor = Wav2Vec2FeatureExtractor.from_pretrained(
             f"{self.model_dir}/wav2vec2-large-xlsr-53"
         )
@@ -84,6 +99,11 @@ class BiCodecTokenizer:
 
     def extract_wav2vec2_features(self, wavs: torch.Tensor) -> torch.Tensor:
         """extract wav2vec2 features"""
+        if self.feature_extractor is None:
+            raise RuntimeError(
+                "wav2vec2 feature extractor was not loaded. Re-create the "
+                "BiCodecTokenizer with load_wav2vec2=True to tokenize audio."
+            )
         inputs = self.processor(
             wavs,
             sampling_rate=16000,
@@ -144,6 +164,37 @@ class BiCodecTokenizer:
         global_tokens = global_tokens.unsqueeze(1)
         wav_rec = self.model.detokenize(semantic_tokens, global_tokens)
         return wav_rec.detach().squeeze().cpu().numpy()
+
+    @torch.inference_mode()
+    def wav_from_token_ids(
+        self,
+        global_token_ids: "list[int]",
+        semantic_token_ids: "list[int]",
+    ) -> np.ndarray:
+        """Reconstruct a waveform from raw BiCodec token ids.
+
+        This is the bridge used by the inference server: the LLM (served by
+        llama.cpp) emits ``<|bicodec_global_X|>`` / ``<|bicodec_semantic_Y|>``
+        tokens, the integers are parsed out, and handed here to be decoded into
+        a 16 kHz waveform.
+
+        Args:
+            global_token_ids: Global (speaker) token ids. Shape: (N_global,).
+            semantic_token_ids: Semantic (content) token ids. Shape: (N_semantic,).
+
+        Returns:
+            np.ndarray: float32 waveform, or an empty array if no semantic tokens.
+        """
+        if not semantic_token_ids:
+            return np.array([], dtype=np.float32)
+
+        if not global_token_ids:
+            global_token_ids = [0]
+
+        global_t = torch.tensor(global_token_ids, dtype=torch.long, device=self.device).unsqueeze(0)
+        semantic_t = torch.tensor(semantic_token_ids, dtype=torch.long, device=self.device).unsqueeze(0)
+
+        return self.detokenize(global_t, semantic_t)
 
 
 # test

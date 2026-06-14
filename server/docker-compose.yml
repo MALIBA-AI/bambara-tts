@@ -1,0 +1,42 @@
+# Two services: the llama.cpp LLM server and the Python gateway (which embeds
+# the BiCodec vocoder). Put the GGUF in ./models before running:
+#   python -m server.download_models --gguf bambara-tts-Q4_K_M.gguf
+#
+#   docker compose -f server/docker-compose.yml up --build
+#
+# Then: curl -X POST localhost:8000/tts -H 'content-type: application/json' \
+#         -d '{"text":"Aw ni ce","speaker":"Bourama"}' --output hello.wav
+
+services:
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: >
+      --model /models/bambara-tts-Q4_K_M.gguf
+      --host 0.0.0.0 --port 8080
+      --ctx-size 4096 --parallel 2
+      --special --no-webui
+    volumes:
+      - ../models:/models:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      LLAMA_SERVER_URL: "http://llama:8080"
+      SPARK_MODEL_DIR: "/models/Spark-TTS-0.5B"
+      TTS_DEVICE: "cpu"
+    volumes:
+      - ../models:/models
+    ports:
+      - "8000:8000"
+    depends_on:
+      llama:
+        condition: service_healthy
