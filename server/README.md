@@ -142,6 +142,9 @@ Body is the same as `/tts` plus:
 | `response_format` | `pcm` | `pcm` (raw s16le mono) or `wav` (streaming header) |
 | `chunk_tokens` | `25` | emit audio every N new semantic tokens (~50 tok/s, so 25 ≈ 0.5 s). Lower = lower latency, more overhead |
 | `context_tokens` | `16` | left-context tokens decoded then trimmed to avoid clicks at chunk seams |
+| `split` | `true` | split text on punctuation and synthesize sentence-by-sentence |
+
+**Sentence-by-sentence synthesis** (`split`, on by default). The text is split on punctuation and each sentence is generated sequentially into one continuous PCM stream (with a short `TTS_STREAM_SENTENCE_GAP_MS` silence between). This gives a much lower time-to-first-audio (the first sentence is short) and — crucially on a CPU/slower-than-real-time backend — makes any buffer underrun fall on a **natural pause between sentences** instead of chopping a word. It does not make the LLM faster; it makes the unavoidable waiting sound natural. Server-side generation and decoding also run concurrently (tokens are pulled while the previous chunk decodes in a worker thread).
 
 **Token → audio:** semantic tokens run at ~50/sec, so each is ≈ **20 ms** (320 samples @ 16 kHz). First audio arrives once all global tokens + the first `chunk_tokens` semantic tokens are generated. The decoder measures samples-per-token from each decode, so timing is exact even if the codec's rate differs.
 
