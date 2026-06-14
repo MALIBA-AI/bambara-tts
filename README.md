@@ -7,22 +7,23 @@ Welcome to the MALIBA-AI Bambara Text-to-Speech Inference SDK! This is the **fir
 1. [About MALIBA-AI](#about-maliba-ai)
 2. [Installation](#installation)
 3. [Quick Start](#quick-start)
-4. [Client Initialization](#client-initialization)
-5. [Basic Usage](#basic-usage)
-   - 5.1 [Simple Text-to-Speech](#simple-text-to-speech)
-   - 5.2 [Speaker Selection](#speaker-selection)
-   - 5.3 [Advanced Configuration](#advanced-configuration)
-6. [Speaker System](#speaker-system)
-7. [Generation Parameters](#generation-parameters)
-8. [Audio Output Options](#audio-output-options)
-9. [Examples](#examples)
-   - 9.1 [Educational Applications](#educational-applications)
-   - 9.2 [Voice Interface Integration](#voice-interface-integration)
-   - 9.3 [Batch Processing](#batch-processing)
-10. [Best Practices](#best-practices)
-11. [Performance Considerations](#performance-considerations)
-12. [Troubleshooting](#troubleshooting)
-13. [Contributing](#contributing)
+4. [Inference Server](#inference-server)
+5. [Client Initialization](#client-initialization)
+6. [Basic Usage](#basic-usage)
+   - 6.1 [Simple Text-to-Speech](#simple-text-to-speech)
+   - 6.2 [Speaker Selection](#speaker-selection)
+   - 6.3 [Advanced Configuration](#advanced-configuration)
+7. [Speaker System](#speaker-system)
+8. [Generation Parameters](#generation-parameters)
+9. [Audio Output Options](#audio-output-options)
+10. [Examples](#examples)
+   - 10.1 [Educational Applications](#educational-applications)
+   - 10.2 [Voice Interface Integration](#voice-interface-integration)
+   - 10.3 [Batch Processing](#batch-processing)
+11. [Best Practices](#best-practices)
+12. [Performance Considerations](#performance-considerations)
+13. [Troubleshooting](#troubleshooting)
+14. [Contributing](#contributing)
 
 ---
 
@@ -91,6 +92,39 @@ audio = tts.generate_speech(text, speaker_id=Speakers.Seydou)
 sf.write("greeting.wav", audio, 16000)
 print("Bambara speech generated successfully!")
 ```
+
+---
+
+## Inference Server
+
+The SDK above runs the full PyTorch model in your own process. If you would rather run Bambara TTS as a service, the repository ships a ready to use inference server in [`server/`](server/README.md).
+
+It serves the quantized GGUF model ([MALIBA-AI/bambara-tts-gguf](https://huggingface.co/MALIBA-AI/bambara-tts-gguf)) with llama.cpp and runs the BiCodec vocoder in a small gateway. This gives you:
+
+- A simple HTTP API that any language or application can call.
+- Real time streaming, so audio starts playing before the full clip is ready.
+- An OpenAI compatible endpoint, so existing OpenAI client code works by changing only the base URL.
+- A built in browser dashboard for testing.
+
+Quick start with Docker:
+
+```bash
+# Download the quantized model and the vocoder assets
+python -m server.download_models --gguf bambara-tts-Q4_K_M.gguf
+
+# Start llama.cpp and the gateway
+docker compose -f server/docker-compose.yml up --build
+
+# Generate speech
+curl -X POST localhost:8000/tts \
+  -H 'content-type: application/json' \
+  -d '{"text":"Aw ni ce, i ka kɛnɛ wa?","speaker":"Bourama"}' \
+  --output hello.wav
+```
+
+A GPU is recommended. The 0.5B model runs many times faster than real time on a GPU, which is what keeps live streaming smooth. On CPU the model generates below real time, so streaming will stutter.
+
+See the [server README](server/README.md) for the full API reference, streaming options, OpenAI usage, the dashboard, and GPU setup.
 
 ---
 
