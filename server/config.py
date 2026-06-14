@@ -49,6 +49,11 @@ class Config:
     stream_sentence_gap_ms: int = int(os.getenv("TTS_STREAM_SENTENCE_GAP_MS", "120"))
     stream_max_sentence_chars: int = int(os.getenv("TTS_STREAM_MAX_SENTENCE_CHARS", "200"))
 
+    # Keep the same voice across sentences: the speaker (global) tokens are
+    # generated once from the first sentence and reused for the rest, instead of
+    # each sentence sampling its own and drifting.
+    stream_lock_voice: bool = _get_bool("TTS_STREAM_LOCK_VOICE", True)
+
     # Normalize input text before building the prompt.
     normalize: bool = _get_bool("TTS_NORMALIZE", True)
 
