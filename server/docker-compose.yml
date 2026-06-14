@@ -18,7 +18,6 @@ services:
       --ctx-size 4096 --parallel 2
       --n-gpu-layers 99
       --special --no-webui
-    gpus: all
     deploy:
       resources:
         reservations:
