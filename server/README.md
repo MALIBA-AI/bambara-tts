@@ -178,6 +178,7 @@ The body is the same as `/tts` plus the following fields.
 | `chunk_tokens` | `25` | Emit audio every N new semantic tokens. About 50 tokens per second, so 25 is roughly 0.5 s. Lower means lower latency and more overhead |
 | `context_tokens` | `16` | Left context tokens that are decoded then trimmed to avoid clicks at chunk seams |
 | `split` | `true` | Split text on punctuation and synthesize sentence by sentence |
+| `lock_voice` | `true` | Reuse the first sentence's speaker tokens for every later sentence so the voice stays consistent |
 
 Play it straight from curl with ffplay:
 
@@ -201,6 +202,7 @@ ffmpeg -f s16le -ar 16000 -ac 1 -i out.pcm out.wav
 Three mechanisms keep the stream smooth:
 
 - **Sentence by sentence synthesis** (`split`, on by default). The text is split on punctuation and each sentence is generated in sequence into one continuous stream, with a short silence between sentences set by `TTS_STREAM_SENTENCE_GAP_MS`. This lowers the time to first audio because the first sentence is short, and it makes any pause fall on a sentence boundary so it sounds natural.
+- **Consistent voice across sentences** (`lock_voice`, on by default). The speaker is encoded by the global tokens, which the model samples at the start of each generation. Without locking, every sentence would sample its own and the voice would drift. With locking, the global tokens generated for the first sentence are injected into the prompt of every later sentence, so the model only generates new content and the voice stays identical.
 - **Overlapping generation and decoding.** Inside each sentence, a producer keeps pulling tokens from llama.cpp while the previous chunk is decoded in a worker thread, so the two stages run at the same time.
 - **Crossfade at chunk seams.** Consecutive chunks are decoded in different contexts, so their waveforms do not line up exactly where they meet. The server holds back the last `TTS_STREAM_XFADE_SAMPLES` (about 24 ms) of each chunk and crossfades it with the same region re-decoded on the next chunk, which removes the click.
 
