@@ -74,6 +74,9 @@ class TTSStreamRequest(TTSRequest):
     context_tokens: Optional[int] = Field(
         None, description="Left-context tokens decoded then trimmed to avoid seams"
     )
+    split: Optional[bool] = Field(
+        None, description="Split text on punctuation and synthesize sentence-by-sentence"
+    )
 
 
 def _resolve_speaker(speaker: str) -> str:
@@ -314,20 +317,49 @@ class _CrossfadeStreamer:
         return out
 
 
-async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
-    if not req.text or not req.text.strip():
-        raise HTTPException(status_code=400, detail="text can not be empty")
+# Sentence enders for Latin-script Bambara text.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?;:])\s+")
+_CLAUSE_SPLIT_RE = re.compile(r"(?<=[,])\s+")
 
+
+def _split_sentences(text: str, max_chars: int) -> list:
+    """Split text into sentences; over-long sentences are split further on commas."""
+    out = []
+    for part in _SENTENCE_SPLIT_RE.split(text.strip()):
+        part = part.strip()
+        if not part:
+            continue
+        if len(part) <= max_chars:
+            out.append(part)
+            continue
+        buf = ""
+        for clause in _CLAUSE_SPLIT_RE.split(part):
+            if len(buf) + len(clause) + 1 <= max_chars:
+                buf = f"{buf} {clause}".strip()
+            else:
+                if buf:
+                    out.append(buf)
+                buf = clause
+        if buf:
+            out.append(buf)
+    return out or [text.strip()]
+
+
+def _silence_pcm(ms: int, sample_rate: int) -> bytes:
+    return b"\x00\x00" * int(sample_rate * ms / 1000)
+
+
+async def _stream_sentence(content: str, req: TTSStreamRequest) -> AsyncIterator[bytes]:
+    """Generate + stream PCM for a single already-formatted sentence.
+
+    Token-reading (from llama.cpp) and BiCodec decoding run concurrently: a
+    producer task keeps pulling tokens while each ready chunk is decoded in a
+    worker thread, so generation and decoding overlap.
+    """
     vocoder = state["vocoder"]
     chunk_tokens = req.chunk_tokens or config.stream_chunk_tokens
     context_tokens = req.context_tokens if req.context_tokens is not None else config.stream_context_tokens
-
-    speaker_id = _resolve_speaker(req.speaker)
-    normalized = _maybe_normalize(req.text, req.normalize)
-    prompt = build_prompt(f"{speaker_id}: {normalized}")
-
-    if req.response_format.lower() == "wav":
-        yield _streaming_wav_header(vocoder.sample_rate)
+    prompt = build_prompt(content)
 
     global_ids: list = []
     semantic: list = []
@@ -388,6 +420,38 @@ async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
             logger.exception("llama.cpp streaming failed", exc_info=err["exc"])
     finally:
         producer.cancel()
+
+
+async def _pcm_stream(req: TTSStreamRequest) -> AsyncIterator[bytes]:
+    """Stream a full request as continuous PCM.
+
+    The text is split into sentences and synthesized one after another. This
+    drops time-to-first-audio (the first sentence is short) and makes any
+    buffer underrun land on a natural pause between sentences instead of
+    mid-word. A short silence is inserted between sentences.
+    """
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="text can not be empty")
+
+    sample_rate = state["vocoder"].sample_rate
+    speaker_id = _resolve_speaker(req.speaker)
+    normalized = _maybe_normalize(req.text, req.normalize)
+
+    do_split = config.stream_split_sentences if req.split is None else req.split
+    sentences = (
+        _split_sentences(normalized, config.stream_max_sentence_chars)
+        if do_split else [normalized]
+    )
+    gap = _silence_pcm(config.stream_sentence_gap_ms, sample_rate) if do_split else b""
+
+    if req.response_format.lower() == "wav":
+        yield _streaming_wav_header(sample_rate)
+
+    for i, sentence in enumerate(sentences):
+        if i and gap:
+            yield gap
+        async for data in _stream_sentence(f"{speaker_id}: {sentence}", req):
+            yield data
 
 
 @app.get("/health")
